@@ -1,0 +1,35 @@
+命令行工具
+===============================================
+RabbitMQ具有多个用于不同场景的命令行工具:
+	rabbitmqctl				->  对应服务管理和常见的操作
+	rabbitmq-diagnostics	->  对应诊断和健康检验
+	rabbitmq-plugins		->  对应插件管理
+	rabbitmqadmin			->  对应HTTP API相关的操作
+
+	除rabbitmqadmin工具之外,其他工具都使用'Erlang Cookie'作为自己与RabbitMQ节点(即RabbitMQ服务器)之间通信的依据；
+	Erlang Cookie是一个最多255个字符的随机字符串,储存在本地文件中(在客户端通常位于$HOME/.erlang.cookie,在服务器通常位于/var/lib/rabbitmq/.erlang.cookie；当客户端的工具与RabbitMQ服务器拥有相同的Erlang Cookie时它们才能互相通信；
+
+RabbitMQ的系统环境要求:
+	1) 安装兼容版本的'Erlang/OTP'
+	2) 系统的语言环境为'UTF-8'(包括但不限于'en_GB.UTF-8'或'en_US.UTF-8')
+
+RabbitMQ中有意地区分'授权'和'验证'这两个概念: 验证是指确认用户是谁,而授权是指决定用户谁并且他不能做什么；
+
+服务器初次运行,会初始化以下资源:
+	1) 名为'/'的虚拟主机
+	2) 名为'guest'密码为'guest'的用户,该用户被授予完全权限,
+	   但该用户只能连接'localhost'(即本地的RabbitMQ服务器),若希望该用户连接其他RabbitMQ服务器,可配置loopback_users = none
+
+当客户端向一个RabbitMQ服务器发起连接时,必须先指定要连接的虚拟主机(与一般的虚拟主机概念有所区别,这里的更接近'权限控制组',是RabbitMQ服务器中能够配置的最小粒度,一个虚拟主机中可以存在多个交换即或队列等资源)；
+随后,服务器开启第一道验证,即发起连接的用户是否具有访问虚拟主机的权限,没有则拒绝其连接；
+当发起连接的用户想操作对应的资源(例如,交换机或队列,不同虚拟主机上的资源可以同名)时,服务器开启第二道验证,即发起操作的用户是否有对应资源对应的操作权限:
+	RabbitMQ将'资源操作'分为配置、写入和读取三种:
+		1) 配置操作可以创建或清除资源
+		2) 写入操作可以向资源中注入信息
+		3) 读取操作可以从资源中获取信息
+
+Python客户端(pika库)
+===============================================
+
+class pika.channel.Channel(connection, channel_number, on_open_callback)
+	--> 即

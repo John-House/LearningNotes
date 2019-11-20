@@ -1,0 +1,2723 @@
+'''
+路由分发
+------------------------------
+	1.请求通过所有中间件的处理流程
+		· 中间件是Django中轻量级的插件，它会处理【进/出】Django的所有【请求/响应】，这些处理发生在请求生命周期的开始和结尾；
+
+		· 中间件是一个接收get_response(即可调用对象，函数或类)作为参数，并返回middleware(即可调用对象，函数或类)的callable(即可调用对象，函数或类)；
+		  其中，middleware接收一个请求对象，并返回一个响应对象；
+
+		· 中间件有两种表现形式，FBM（Function-Based Middleware）和 CBM（Class-Based Middleware），形如：
+			  def 中间件名(get_response):
+			      def middleware(request):
+			          response = get_response(request)
+			          return response
+			      return middleware
+
+		      #################################
+
+			  class 中间件名:
+			      def __init__(self, get_response):
+			          self.get_response = get_response         # __init__方法不接收任何其他的参数，仅调用一次；
+			                                                     __init__方法如果raise MiddlewareNotUsed，则表示禁用当前的中间件；
+			      def __call__(self, request):                 # __call__方法每有一个请求就调用一次
+			      	  response = self.get_response(request)
+			      	  return response
+
+		      在上述CBM的__call__方法中，get_response()方法可以被替换为其他的方法，例如：process_request()和process_response()，
+		      正如所有【内置中间件】的父类MiddlewareMixin中所写：
+
+		          class MiddlewareMixin:
+				      def __init__(self, get_response=None):
+				          self.get_response = get_response
+				          super().__init__()
+
+				      def __call__(self, request):
+				          response = None
+				          if hasattr(self, 'process_request'):
+				              response = self.process_request(request)
+				          if not response:
+				              response = self.get_response(request)
+				          if hasattr(self, 'process_response'):
+				              response = self.process_response(request, response)
+				          return response
+
+		· 用户也可以自定义中间件，为此Django向用户提供了3个额外钩子来实现它：process_view()、process_exception()、process_template_response()
+	          from django.utils.deprecation import MiddlewareMixin
+
+	          class 自定义中间件名(MiddlewareMixin):
+
+	          	  def process_request(self, request):
+					  ...
+	          	      return HttpResponse对象/None
+
+
+	              # 请求通过所有中间件的process_request()方法后,【预先进行路由匹配】并拿到process_view()所需的参数，
+	                然后，折回最开始的中间件开始通过所有中间件的process_view()方法；
+	                换句话说，在执行请求对应的视图函数之前，优先执行所有中间件的process_view()方法；
+	                process_view()方法中：
+	                	view_func    --> 视图函数对象
+	                	view_args    --> 无名分组值
+	                	view_kwargs  --> 命名分组值 和 模式匹配提供的额外参数
+				  def process_view(self, request, view_func, view_args, view_kwargs):
+				  	  ...
+				  	  return HttpResponse对象/None
+
+
+	          	  def process_response(self, request, response):
+	          	  	  ...
+	          	  	  return HttpResponse对象
+
+		· Django 2.0版本中的MiddlewareMixin兼容了新版（1.10之后）的MIDDLEWARE和老版（1.10之前）的MIDDLEWARE_CLASSES；
+		  新版的MIDDLEWARE执行流程见上述源码，老版的MIDDLEWARE_CLASSES执行流程是直接调用process_request和process_response方法；
+
+		· 中间件的配置，在settings.py文件中配置MIDDLEWARE变量的值，该值中元素的先后位置很重要；
+		  MIDDLEWARE = [
+		      '中间件路径名',
+		      ...,
+		  ]
+
+	2.请求通过所有中间件后的处理流程
+
+		a) Django找到settings.py文件中ROOT_URLCONF变量的值（即一个'模块路径'）；
+		   如果请求中带有urlconf属性，则该属性的值将替代ROOT_URLCONF变量的值；
+
+		b) Django找到上述'模块路径'中urlpatterns变量的值（即一个'列表'），该列表中的元素均为
+		   django.urls.path()实例对象 或 django.urls.re_path()实例对象；
+
+		c) Django按顺序遍历上述'列表'，找到第一个符合请求URL的模式，
+		   然后调用该模式所对应的视图函数（即FBV，function-based view）或视图类方法（即CBV，class-based view）；
+		   在调用的同时，将【请求封装成对象】连同【模式的分组值】和【额外的参数】一起传入视图函数或视图类方法中；
+
+		d) Django如果没有找到符合请求URL的模式，则调用内置的error-handling视图函数，包括：
+			   django.conf.urls.handler400
+			   django.conf.urls.handler403
+			   django.conf.urls.handler404
+			   django.conf.urls.handler500
+		   以上类都可以重写，从而定义你想要的内容
+
+	3.请求URL的模式匹配
+
+		3.1 '列表'元素为django.urls.path()实例对象
+
+			a) 使用'<key>'捕获分组值，例如：
+			   path('articles/<year>', views.xx, kwargs={'参数名':参数值})      --> 捕获的分组值为str类型，用变量year指向它，{...}是额外传递给视图函数的参数
+
+			b) 使用'<type:key>'捕获分组值，同时将该值类型进行转换，例如：
+			   path('articles/<int:year>', views.xx, kwargs={'参数名':参数值})  --> 捕获的分组值为int类型，用变量year指向它，{...}是额外传递给视图函数的参数
+
+			c) 使用类型转换的注意点
+			   -> ':'左右不能有空格；
+
+			   -> 转换器的类型包括：str(非空字符串，默认值)、int(自然数)、slug、uuid(UUID格式的字符串)、path(路径格式的非空字符串)；
+
+			   -> 自定义转换器，具体如下：
+			   		· 在【根URL配置】模块中定义一个类，形如：
+				   		class 类名(object):
+				   			regex = 'xx'                	  --> 类属性，必须且属性名不能变更
+
+				   			def to_python(self, value):       --> 实例方法，必须且方法名不能变更
+							    pass                              作用：将regex匹配到的str值，转换成你指定类型的值，然后return它（用于传递给视图函数）
+							    								       如果无法转换regex匹配到的str值，该方法应该raise ValueError异常
+
+							def to_url(self, value):          --> 实例方法，必须且方法名不能变更
+							    pass                              作用：将你自定义类型的值转换成str值（用于URL中），然后return它
+
+			        · 在【根URL配置】模块内注册定义的类：
+			        	from django.urls import register_converter
+
+			        	register_converter(类名, '使用名') 	  --> 类名和使用名都可以随意，但最好见名知意
+
+					· 使用时，形如：
+						path('articles/<使用名:xx>)', views.xx, kwargs={'参数名':参数值})
+
+		3.2 '列表'元素为django.urls.re_path()实例对象
+
+			a) 使用Python中正则的语法捕获分组值，例如：re_path(r'正则表达式', views.xx, kwargs={'参数名':参数值})
+
+			b) 正则表达式中的分组有两大类：无名分组(...)和命名分组(?P<name>...)
+			   如果正则表达式中存在【嵌套分组】，Django会按照正则表达式的'('顺序依次捕获，并传递给视图函数
+
+			c) 使用re_path()时，建议使用单一形式的分组（推荐命名分组）；
+			   如果【无名分组】和【命名分组】混用，则只有【命名分组】的分组值会被传递给视图函数（无名分组捕获的值会被忽略）；
+			   捕获到的分组值都是str类型；
+
+
+		3.3 模式匹配的注意点
+
+			a) 请求中URL的模式匹配，不会匹配【查询字符串】和【域名(主机:端口)】
+
+			b) 如果请求中URL不匹配任何一个urlpatterns列表中的模式，Django会调用内置的error-handling视图函数
+
+
+		3.4 模式匹配的次级分发
+
+
+			a) 在urlpatterns的模式编写中，如果有共同前缀可以进行次级分发，例如：
+
+				urlpatterns = [
+				    path('<page_slug>-<page_id>/history/', views.history, kwargs={'参数名':参数值}),
+				    path('<page_slug>-<page_id>/edit/', views.edit, kwargs={'参数名':参数值}),
+				    path('<page_slug>-<page_id>/discuss/', views.discuss, kwargs={'参数名':参数值}),
+				    path('<page_slug>-<page_id>/permissions/', views.permissions, kwargs={'参数名':参数值}),
+				]
+
+				等价于
+
+				from django.urls import include
+
+				urlpatterns = [
+					path('<page_slug>-<page_id>/', include([
+					        path('history/', views.history, kwargs={'参数名':参数值}),
+					        path('edit/', views.edit, kwargs={'参数名':参数值}),
+					        path('discuss/', views.discuss, kwargs={'参数名':参数值}),
+					        path('permissions/', views.permissions, kwargs={'参数名':参数值}),
+					    	])
+						),
+				]
+
+			   	另一种情况：
+
+				from django.urls import include
+
+				urlpatterns = [
+					path('router1', include('app1.urls'), kwargs={'参数名':参数值}),
+					path('router2', include('app2.urls'), kwargs={'参数名':参数值}),
+				]
+
+			b) 次级分发时，上一级模式匹配到的参数，以及{...}等额外传递的参数，都会传递给下一级模式匹配所对应的视图函数，
+			   换言之，最后一级分发所对应的视图函数，会接收所有层级下模式匹配捕获到的所有值，以及{...}等额外传递的参数；
+
+	4.模式匹配的逆向生成URL
+
+		a) 在模板文件中使用特殊语言标签'url'
+
+			-> 先在urlpatterns列表中设置'name'值（为特殊语言标签'url'提供钩子）
+				urlpatterns = {
+					path('xx', views.xx, name='xxx'),
+					...
+				}
+
+			-> 在模板文件中插入标签'url'
+				<body>
+					...
+					{% url 'xxx' 分组值1 分组值2 ... %}    # 如果path()中设置了分组，则需要提供对应的分组值
+					...
+				</body>
+
+		b) 在视图函数中使用特殊方法reverse()
+
+		   	-> 先在urlpatterns列表中设置'name'值
+				urlpatterns = {
+					path('xx', views.xx, name='xxx'),
+					...
+				}
+
+			-> 在视图函数中使用'reverse()'
+				from django.urls import reverse
+
+				url = reverse('xxx', args=(...), kwargs={...})  # 如果path()中设置了分组，则需要提供对应的额外参数
+																  返回值url就是逆向生成的URL，可以在视图函数中使用
+
+	5.URL的命名空间
+		在urlpatterns变量的每个模式匹配后，添加name='xxx'，从而确定对应的命名空间
+
+	6.请求对应的视图函数
+	    · 基于函数的视图（FBV）
+	        # 在对应APP的目录下存在views.py文件，在该文件中编写视图函数
+	          def xx(request, *args, **kwargs):     # args和kwargs中可能是【分组值参数】和【字典形式的额外参数】
+	              return anything
+
+	        # 视图函数可以返回对应请求的任何内容，通常为：
+	          from django.shortcuts import render, redirect
+	          from django.http import HttpResponse, ...
+
+	          a) return render(request, template_name, options)
+	                --> template_name: 即'xxx.html'
+	                --> options: context=None ,字典类型，作用于'模板语言'
+	                             content_type=None ,字符串类型，表明Response对象的MIME类型
+	                             status=None ,数字类型，对应于响应的'状态码'
+
+	          b) return redirect(to, permanent=False)
+	                --> 本质上是return一个HttpResponseRedirect()对象
+	                --> to ,字符串类型，表明重定向的URL
+	                --> permanent ,布尔类型，默认是临时的重定向；如果为True则是永久的重定向（等价于状态码301）
+
+	          c) return HttpResponse('html代码')
+
+	          d) return 错误信息           # 所有的错误信息都【直接或间接】继承自HttpResponse()类
+	                --> HttpResponseRedirect(redirect_to='相对URL/绝对URL'), 等价于状态码302
+	                --> HttpResponsePermanentRedirect(redirect_to='相对URL/绝对URL'), 等价于状态码301
+	                --> HttpResponseNotFound('html代码') ,等价于状态码404
+	                ...
+
+	        # 视图函数的装饰器
+	          a) 可以通过装饰器限制视图函数只处理指定请求方式的request请求
+	              from django.views.decorators.http import require_http_methods
+
+	              @require_http_methods(['xx','xx',...])    # 该装饰器限定了该视图函数仅接收那些请求方法位于['xx','xx',...]列表中的request
+	              def xx(request, *args, **kwargs):
+	                  return anything
+
+	          b) Django中默认使用request请求的完整URL作为缓存key，但考虑到请求头和请求Cookie的不同可能需要不同的缓存机制，仅靠请求的URL来识别是不够的；
+	             所以借助vary请求头的信息来配置对应的缓存机制
+	              from django.views.decorators.vary import vary_on_headers
+
+	              @vary_on_headers(*headers)                # *headers可以是: 'User-Agent','Cookie'等，它们告诉Django即使是向同一个URL发送请求，
+	              def xx(request, *args, **kwargs):           但只要请求的'User-Agent'和/或'Cookie'不同，就要当作不同的request请求处理，配置对应的缓存机制
+	                  return anything
+
+	              @vary_on_headers('Cookie') 等价于 @vary_on_cookie
+
+	              另外一种解决方法：
+
+	              from django.utils.cache import patch_vary_headers
+
+	              def xx(request, *args, **kwargs):
+	                  ...
+	                  response = render(...)/HttpResponse(...)/redirect(...)
+	                  patch_vary_headers(response, ['User-Agent', 'Cookie'])
+	                  return response
+
+	          c) 用户通常用到2种缓存：浏览器使用的缓存（私有缓存），用户提供者的缓存（公有缓存）；敏感信息应该用私有缓存，即private=True（私有缓存和公有缓存的设置是互斥的）
+	              from django.views.decorators.cache import cache_control
+
+	              @cache_control(**kwargs)                  # **kwargs可以是: private=True/False
+	              def xx(request, *args, **kwargs):                          max_age=xx   (单位：秒，告诉浏览器客户端最大缓存时间）
+	                  return anything                         其他有效的Cache-Control响应头设置，例如：
+	                                                                         no_transform=True
+	                                                                         must_revalidate=True
+	                                                                         stale_while_revalidate=num_seconds
+	              另外一种解决方法：
+
+	              from django.utils.cache import patch_cache_control
+
+	              def xx(request, *args, **kwargs):
+	                  ...
+	                  response = render(...)/HttpResponse(...)/redirect(...)
+	                  patch_cache_control(response, private=True, max_age=xxx, ...)
+	                  return response
+
+	          d) 告诉浏览器和其他缓存机制，坚决不缓存
+	              from django.views.decorators.cache import never_cache
+
+	              @never_cache
+	              def xx(request, *args, **kwargs):
+	                      return anything
+
+	    · 基于类的视图（CBV）
+	        # 函数视图通过条件分支来判断请求的方式并执行对应的业务逻辑，类视图则通过获取请求的方式来调用对应的类方法；
+	          因此，类视图具有高扩展(借助嵌套和继承)和高复用的特点，适合处理复杂的路由分发；
+
+	          Django中内置了不少视图类，具有许多视图处理中常见的功能；
+	          这些内置的视图类往往会提供类属性供我们便捷设置，提供同名或近似名的实例方法(用于内部实现配置类属性所达到的效果)供我们重写；
+
+	        # 类视图的声明和定义
+
+	          a) 视图类的声明
+	              import 视图类名
+
+	              urlpatterns = [
+	                  path('xxx', 视图类名.as_view(...), kwargs={...}, name='xxx'),
+	                  ...
+	              ]
+
+	          b) 视图类的定义
+	              from django.views import View  # View是所有Django内置视图类的基类，仅提供最基本的功能
+
+	              class 视图类名(View):
+	                  ...                        # 静态定义的类属性
+	                  def get(self, request):    # 定义与请求方式同名的实例方法
+	                      ...
+	                      return ...             # return的内容与函数视图中一样，可以是HttpResponse对像/render(...)/redirect(...)等等
+
+	                  def post(self, request):   # 定义与请求方式同名的实例方法
+	                      ...
+	                      return ...             # return的内容与函数视图中一样，可以是HttpResponse对像/render(...)/redirect(...)等等
+	                  ...
+
+	          c) 说明  - 视图类名通常继承自Django内置的视图类(详见下文)；
+	                  - as_view(...)是视图类或其父类的类方法。该方法是一个闭包，调用它会返回嵌套的view函数对象，
+	                    view函数对象内部会调用dispatch()实例方法，并将其结果返回，
+	                    dispatch()实例方法会内部判断请求的方式，然后调用视图类中与该请求方式同名的实例方法，
+	                    因此，我们可以在视图类中定义这些与请求方式同名的实例方法，从而执行对应的业务逻辑；
+	                  - as_view(...)中传入的关键字参数，将作为实例属性添加至视图类的实例对象中，这些属性必须是视图类中已经定义的类属性，否则raise TypeError；
+
+	          d) 视图类的装饰
+	             # 与函数视图一样，可以装饰在urlpatterns中，也可以装饰在视图类中；
+
+	             # urlpatterns = [
+	                   path('xxx', 装饰器名(视图类名.as_view(...)),
+	                   path('xxx', 带参数装饰器名(参数)(视图类名.as_view(...))),
+	                   ...
+	               ]
+
+	             - - - - - - - - - - - - - - - - - - -
+
+	             # 由于视图类中，处理请求的业务逻辑是【由dispatch()方法创建视图类的实例对象】，然后根据不同的请求方式调用不同的实例方法实现的；
+	               所以，视图类的装饰器应该装饰在dispatch()方法上，但由于普通的装饰器无法装饰实例方法，因此需要借助：
+	                   from django.utils.decorators import method_decorator    # method_decorator可以装饰实例方法的装饰器
+
+	                   class 视图类名(View):
+
+	                       @method_decorator(装饰器名)                       # 将具体的装饰器作为参数传入
+	                       def dispatch(self, *args, **kwargs):            # 重写父类的dispatch()实例方法
+	                           return super().dispatch(*args, **kwargs)    # 利用继承将具体的实现委托给父类
+
+	               ::= 更推荐以下方式：
+	                   from django.utils.decorators import method_decorator
+
+	                   @method_decorator([装饰器名, 装饰器名(参数), ...], name='dispatch')    # [...]用于接收一个或多个装饰器
+	                   class 视图类名(View):                                                  name用于指定视图类中被装饰的实例方法
+	                       pass
+
+	                   等价于：
+
+	                   @method_decorator(装饰器名, name='dispatch')
+	                   @method_decorator(装饰器名(参数), name='dispatch')
+	                   @method_decorator(..., name='dispatch')
+	                   class 视图类名(View):
+	                       pass
+
+	        # Django内置的常用视图类
+
+	          以下视图类中的属性或实例方法是常见的、可配置的，其他可重写的或内部实现用的见官方文档；
+	          以下视图类是Django内置的，为便捷实现常见视图功能的类，若不需要完全可以不用；
+
+	          a) 基类和低阶视图类
+	             View           --> 适合get/post/head/put/options/delet/patch/trace方式，
+	                                所有内置视图类的基类
+	                from django.views.generic.base import View
+
+	                class 视图类名(View):
+	                    # 设置当前视图类接受的请求方式，默认共8种
+	                    http_method_names = ['get', 'post', ...]
+
+
+	             TemplateView   --> 适合get方式，
+	                                渲染指定模板并传递对应上下文的低阶视图类
+	                from django.views.generic.base import TemplateView
+
+	                class 视图类名(TemplateView):
+	                    # 设置当前视图类返回时依据的模板
+	                    template_name = 'xxx'        // 若未指定模板名，则使用默认模板名：'当前APP名/使用的模型类名+模板后缀名.html'
+
+	                    # 重写方法，指定当前视图类返回时传入模板中的上下文
+	                    def get_context_data(self, **kwargs):
+	                        context = super().get_context_data(**kwargs)   // 委托父类创建一个基本的上下文，**kwargs中接收URL分组和kwargs参数的内容
+	                        context[key] = value                           // 自行添加内容并返回
+	                        ...
+	                        return context
+
+	                    # 特殊功能：extra_context参数可以指定当前视图类返回时额外传入模板中的上下文
+	                    urlpatterns = [
+	                        path('xxx', 视图类名.as_view(extra_context={...})
+	                    ]
+
+
+	             RedirectView   --> 适合get/post/head/put/options/delet/patch方式，
+	                                实现重定向的低阶视图类
+	                from django.views.generic.base import RedirectView
+
+	                class 视图类名(RedirectView):
+	                    # 设置重定向的URL
+	                    url = 'xxx'/None         // 如果url=None，则返回410错误
+	                    # 重定向至urlpatterns中对应name值的URL
+	                    pattern_name = 'xxx'     // 逆向生成URL时会依据原来请求传入视图中的所有参数
+
+	                    # 设置重定向是否为永久
+	                    permanent = True/False   // 若=True，状态码为301；若=False，状态码为302
+
+	                    # 设置重定向是否会附上原来请求的查询字符串
+	                    query_string = True/False
+
+	          b) 嵌套向低阶视图类
+	             ContextMixin
+	             TemplateResponseMixin
+	             SingleObjectMixin
+	             SingleObjectTemplateResponseMixin
+	             MultipleObjectMixin
+	             MultipleObjectTemplateResponseMixin
+
+	          c) 展示向高阶视图类
+	             DetailView     --> 适合get方式，
+	                                用于展示单个数据的高阶视图类
+	                from django.views.generic.detail import DetailView
+	                import 模型类名
+
+	                class 视图类名(DetailView):
+	                    # 设置展示哪种模型类的对象(即数据)
+	                    model = 模型类名                // 展示：模型类名.objects.all() 即所有的模型类对象
+	                    queryset = 查询语句.all()       // 替代model的设置，展示：查询语句 即筛选后的模型类对象，.all()是为避免污染源数据而拷贝一份
+
+	                    # 设置当前视图类返回时依据的模板
+	                    template_name = 'xxx'         // 若未指定模板名，则使用默认模板名：'当前APP名/使用的模型类名+模板后缀名.html'
+	                    # 设置默认模板名中'使用的模型类名'部分
+	                    template_name_field = 'xxx'
+	                    # 设置默认模板名中'模板后缀名'部分
+	                    template_name_suffix = 'xxx'
+	                    # 设置当前视图类返回的response的类型
+	                    content_type = 'xxx'/None     // 默认为None，即使用setting.py中DEFAULT_CONTENT_TYPE的配置
+
+	                    # 设置模板语言中上下文使用时的变量名
+	                    context_object_name = 'xxx'   // 默认在模板语言中使用该属性的值作为上下文中引用展示数据的变量名，
+	                                                     若未设置，在模板语言中也可以使用 全小写模型类名 或 object 来引用要展示的对象，
+
+	                    # 重写方法，指定当前视图类返回时传入模板中的上下文
+	                    def get_context_date(self, **kwargs):
+	                        context = super().get_context_data(**kwargs)   // 委托父类创建一个基本的上下文，**kwargs中接收URL分组和kwargs参数的内容
+	                        context[key] = value                           // 自行添加内容并返回
+	                        ...
+	                        return context
+
+
+	             ListView       --> 适合get方式，
+	                                用于展示多个数据的高阶视图类
+	                from django.views.generic.list import ListView
+
+	                class 视图类名(ListView):
+	                    # 设置展示哪种模型类的对象(即数据)
+	                    model = 模型类名                // 展示：模型类名.objects.all() 即所有的模型类对象
+	                    queryset = 查询语句.all()       // 替代model的设置，展示：查询语句 即筛选后的模型类对象，.all()是为避免污染源数据而拷贝一份
+	                    # 设置展示对象的排序规则
+	                    ordering = ['-/?xx', ...]     // 也可以在queryset属性对应的查询语句中提前排好序
+
+	                    # 是否允许展示空的内容
+	                    allow_empty = True/False      // 默认为True，若=False且展示的内容为空，则返回404错误
+	                    # 设置每一页展示的内容个数
+	                    paginate_by = 整数
+	                    # 设置落单指数
+	                    paginate_orphans = 整数
+	                    # 设置请求URL中表示'请求页数'的key值
+	                    page_kwarg = 'page'/'xxx'     // 默认为'page'，即若在 path('xxx/<page>', ...) 或查询字符串 http:.../?page=xxx 这样设置，
+	                                                     则当前视图类会返回key值page所对应页数的页面对象
+
+	                    # 设置当前视图类返回时依据的模板
+	                    template_name = 'xxx'         // 若未指定模板名，则使用默认模板名：'当前APP名/使用的模型类名+模板后缀名.html'
+	                    # 设置默认模板名中'使用的模型类名'部分
+	                    template_name_field = 'xxx'
+	                    # 设置默认模板名中'模板后缀名'部分
+	                    template_name_suffix = 'xxx'
+	                    # 设置当前视图类返回的response的类型
+	                    content_type = 'xxx'/None     // 默认为None，即使用setting.py中DEFAULT_CONTENT_TYPE的配置
+
+	                    # 设置模板语言中上下文使用时的变量名
+	                    context_object_name = 'xxx'   // 默认在模板语言中使用该属性的值作为上下文中引用展示数据的变量名，
+	                                                     若未设置，在模板语言中也可以使用 全小写模型类名_list 或 object_list 来引用要展示的对象，
+
+	          c) 编辑向高阶视图类
+	             FormView       --> 适合get/post/put方式，
+	                                渲染普通表单
+	                from django.views.generic.edit import FormView, ModelFormMixin
+	                import 模型类名
+	                import 表单类名
+
+	                class 视图类名(FormView, ModelFormMixin):
+	                    # 继承自ModelFormMixin只是考虑到ModelForm的情况
+	                    object = 模型类名()
+	                    field = ['xx', 'xx', ...]     // 若继承自ModelFormMixin，则field和form_class不能同时存在
+	                    # 设置当前视图类依据的表单类
+	                    form_class = 表单类名
+
+	                    # 设置当前视图类返回时模板中表单对象的初始值
+	                    initial = {...}
+
+	                    # 设置表单验证通过后重定向的URL
+	                    success_url = 'xxx'
+
+	                    # 设置当前视图类返回时依据的模板
+	                    template_name = 'xxx'         // 若未指定模板名，则使用默认模板名：'当前APP名/使用的模型类名+模板后缀名.html'
+	                    # 设置默认模板名中'使用的模型类名'部分
+	                    template_name_field = 'xxx'
+	                    # 设置默认模板名中'模板后缀名'部分
+	                    template_name_suffix = 'xxx'
+	                    # 设置当前视图类返回的response的类型
+	                    content_type = 'xxx'/None     // 默认为None，即使用setting.py中DEFAULT_CONTENT_TYPE的配置
+
+	                    # 重写方法，请求方式为POST且表单数据验证通过后执行的方法
+	                    def form_valid(self, form):
+	                        ...                      // 可以像视图函数中的一样操作form对象
+	                    # 重写方法，请求方式为POST但表单数据验证未通过后执行的方法
+	                    def form_invalid(self, form):
+	                        ...                      // 可以像视图函数中的一样操作form对象
+
+	                    # 重写方法，指定当前视图类返回时传入模板中的上下文
+	                    def get_context_date(self, **kwargs):
+	                        context = super().get_context_data(**kwargs)   // 委托父类创建一个基本的上下文，**kwargs中接收URL分组和kwargs参数的内容
+	                        context[key] = value                           // 自行添加内容并返回
+	                        ...
+	                        return context
+
+	          d) 日期向高阶视图类
+	                from django.views.generic.dates import ArchiveIndexView
+
+	                class
+	          ...
+
+	    · 发送邮件
+	      # settings.py文件中的配置
+	        EMAIL_BACKEND
+	            --> 用于发送邮件的后端，除默认的邮件后端外，其他后端多用于测试和开发阶段；
+	            --> 默认：'django.core.mail.backends.smtp.EmailBackend'
+	                     'django.core.mail.backends.console.EmailBackend'
+	                     'django.core.mail.backends.filebased.EmailBackend'
+	                         额外指定 EMAIL_FILE_PATH = 系统级文件目录
+	                     'django.core.mail.backends.locmem.EmailBackend'
+	                     'django.core.mail.backends.dummy.EmailBackend'
+
+	        EMAIL_HOST
+	            --> 发送方的邮件服务器主机名；
+	            --> 默认：'localhost'
+	        EMAIL_PORT
+	            --> 发送方的邮件服务器端口号，若涉及SSL/TLS，将变更为465/578；
+	            --> 默认：25
+
+	        EMAIL_HOST_USER
+	            --> 发送方连接邮件服务器时用于验证自己身份的'用户名'，默认为空，表示不进行验证；
+	            --> 默认：''
+	        EMAIL_HOST_PASSWORD
+	            --> 发送方连接邮件服务器时用于验证自己身份的'密码'，默认为空，表示也会不进行验证；
+	            --> 默认：''
+
+	        EMAIL_USE_SSL
+	            --> 发送方是否使用SSL方式连接邮件服务器，若为True，则EMAIL_PORT通常为465；
+	                EMAIL_USE_SSL和EMAIL_USE_TLS只需设置一个；
+	            --> 默认：False
+	        EMAIL_USE_TLS
+	            --> 发送方是否使用TLS方式连接邮件服务器，若为True，则EMAIL_PORT通常为587；
+	                EMAIL_USE_SSL和EMAIL_USE_TLS只需设置一个；
+	            --> 默认：False
+
+	        EMAIL_FROM_EMAIL
+	            --> 当未指定发送邮件的发送方时，默认采用该配置的值；
+	            --> 默认：'webmaster@localhost'
+
+	      # Django中邮件内容由EmailMessage类决定，邮件发送由对应的后端操作
+
+	            from django.core import mail
+
+	            mail.EmailMessage(...)
+	                --> ctype: EmailMessage对象，mail.message.EmailMessage(...)的shortcut；
+	                --> subject ,字符串，即待发送邮件的主题；
+	                --> body ,字符串，即待发送邮件的主体内容；
+	                --> from_email ,字符串，即待发送邮件的发送方信息，例如：'xx@xxx.com'或'x<xx@xxx.com>'，
+	                                若未指定，则使用EMAIL_FROM_EMAIL的值；
+	                --> to ,列表/元组(内嵌字符串)，即待发送邮件的接收方名单；
+	                --> bcc ,列表/元组(内嵌字符串)，即待发送邮件的密送方名单；
+	                --> connection ,Email Backend实例，即若指定该参数，则多条邮件均通过该后端发送；若省略，则每发一次，自动新建一个后端；
+	                --> attachments ,列表(内嵌元组或MIMEBase实例)，即待发送邮件的附件内容；
+	                --> headers ,字典，即待发送邮件的额外头信息；
+	                --> cc ,列表/元组(内嵌字符串)，即待发送邮件的抄送方名单；
+	                --> reply_to ,列表/元组(内嵌字符串)，即待发送邮件的回送方名单；
+
+	            mail.EmailMultiAlternatives(...)
+	                --> ctype: EmailMultiAlternatives对象，mail.message.EmailMultiAlternatives(...)的shortcut
+	                           EmailMessage类的子类，继承了父类全部方法(包括初始化方法）的同时，新增attach_alternative()方法，
+	                           用于向待发送邮件的主体内容中添加不同MIME类型的信息；
+
+	                .attach_alternative(content, mimetype)
+	                    --> ctype: None，即向待发送邮件的主体内容中添加不同MIME类型的信息；
+
+
+
+	                .content_subtype
+	                    --> ctype: None，即修改待发送邮件的MIME类型，由于body参数为字符串，所以默认MIME类型为text/plain；
+	                                    修改该属性可以调整邮件MIME的子类型；
+
+	                .send(fail_silently=False)
+	                    --> ctype: None，即发送准备好的邮件；
+	                    --> fail_silently ,若为True，则取消邮件发送时会抛出异常；
+
+	                .message()
+	                    --> ctype: SafeMIMEText对象/SafeMIMEMultipart对象，即用于包裹邮件内容的对象，子类化时建议重写；
+
+	                .recipients()
+	                    --> ctype: 列表，即包括所有to/cc/bcc的接收方名单，子类化时建议重写；
+
+	                .attach(filename=None, content=None, mimetype=None)
+	                    --> ctype: None，即向待发送邮件中添加新的附件内容；
+	                    --> filename ,即若为MIMEBase对象，则content和mimetype必须为None；
+	                                  若为字符串，则表示邮件中附件的名字，同时需要content和mimetype参数共同指定一定附件对象；
+	                    --> content ,对象，即附件的实际数据内容；
+	                    --> mimetype ,字符串，即为附件指定对应的MIME类型；
+
+	                .attach_file(path, mimetype=None)
+	                    --> ctype: None，即向待发送邮件中添加新的附件内容（依据系统路径）；
+	                    --> mimetype ,字符串，即为附件指定对应的MIME类型；
+
+	            mail.get_connection(backend=None, fail_silently=False, **kwds)
+	                --> ctype: 后端对象，即若指定backend参数，则使用该参数对应的邮件后端；否则使用EMAIL_BACKEND的值；
+	                           fail_silently和kwds参数都将传入后端类中用于实例化；
+
+	                后端对象.send_messages(email_messages)
+	                    --> ctype: None，即发送多条邮件，后端对象支持上下文，因此可以写作：；
+
+	                               with mail.get_connection() as connection:
+	                                   mail.EmailMessage(...).send()
+	                                   mail.EmailMessage(...).send()
+	                                   ...
+	                                   或者
+	                                   connection.send_messages(email_messages)
+
+	                    --> email_messages ,列表，即包含EmailMessage对象的列表；
+
+		· 内容分页
+		  from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger, InvalidPage
+
+		  Paginator(object_list, per_page, orphans=0, allow_empty_first_page=True)
+		      --> ctype: 分页对象，即根据object_list参数和per_page参数创建一个分页对象
+		      --> object_list ,即列表、元组、QuerySet对象等等，是待分页显示的内容集合；
+		                       通常这些内容都已经排好序了(借助.order_by()方法或在模型类中定义了ordering属性)
+		      --> per_page ,即数字，表示分页后每一页显示的内容个数；
+		      --> orphans ,即落单指数,若最后一页有多余的内容(即内容集合/per_page不是整除)，
+		                            当多余内容个数小于或等于落单指数时，将多余内容合并到倒数第二页；
+		      --> allow_empty_first_page ,即是否允许分页显示的第一页内容为空，若为False且object_list为空，则raise EmptyPage异常；
+
+	      分页对象.get_page(number)
+	          --> ctype: 页面对象，即类序列对象，根据number参数返回对应页数(从1开始)的页面对象；
+	                             当且仅当分页对象的allow_empty_first_page=False且object_list为空时，raise EmptyPage异常；
+	          --> number ,即页数，若number参数是非整数，则对应第1页的页面对象；若是负数或超过最大页面数，则对应最后1页的页面对象；
+
+	      分页对象.page(number)
+	          --> ctype: 页面对象，即类序列对象，根据number参数返回对应页数(从1开始)的页面对象；
+	                             若number参数指定的页数不存在，raise InvalidPage异常；
+
+	          .get_page()和.page()对应的Exception信息：
+	          InvalidPage异常是分页对象相关的所有异常的基类，更具体的异常如下：
+	              当number参数为非整数时，raise PageNotAnInteger异常；
+	              当number参数对应的页面对象为空时，raise EmptyPage异常；
+
+	      分页对象.count
+	          --> ctype: 整数，即页面对象中包含的内容总个数；
+
+	      分页对象.num_pages
+	          --> ctype: 整数，即页面对象分页后的总页数；
+
+	      分页对象.page_range
+	          --> ctype: range对象，即range(1, x)对象，从1开始的迭代器对象；
+
+	          class Page(object_list, number, paginator)
+	              --> ctype: 页面对象，即创建页面对象的类（一般不通过这种方式创建页面对象）
+
+	          页面对象.has_previous()
+	              --> ctype: True/False，即当前的页面对象在整个分页对象中是否还有前一页；
+	          页面对象.has_next()
+	              --> ctype: True/False，即同上，是否还有后一页；
+	          页面对象.has_other_pages()
+	              --> ctype: True/False，即同上，是否还有前一页或者后一页；
+
+	          页面对象.previous_page_number()
+	              --> ctype: 整数，即返回当前的页数的前一页数，若前一页数不存在，raise InvalidPage异常；
+	          页面对象.next_page_number()
+	              --> ctype: 整数，即返回当前的页数的后一页数，若后一页数不存在，raise InvalidPage异常；
+
+	          页面对象.start_index()
+	              --> ctype: 内容索引，即返回当前的页面对象的第一个内容在整个分页对象中的内容集合中的索引值；
+	          页面对象.end_index()
+	              --> ctype: 内容索引，即同上，返回当前的页面对象的最后一个内容的；
+
+	          页面对象.object_list
+	              --> ctype: 列表，即当前的页面对象中所有的内容，与直接迭代当前的页面对象的结果相同；
+
+	          页面对象.number
+	              --> ctype: 整数，即返回当前的页面对象在整个分页对象中的页数；
+
+	          页面对象.paginator
+	              --> ctype: 分页对象，即当前的页面对象回溯其分页对象的接口；
+
+	7.封装请求的对象
+
+		7.1 HttpRequest对象
+
+			request对象.urlconf
+				--> ctype: None/字符串，即重写请求的模式匹配所在的模块路径；如果为None，则表示依然遵循ROOT_URLCONF配置项的值；
+
+			request对象.scheme
+				--> ctype: 字符串，即请求的协议类型（通常是http或https）
+
+			request对象.method
+				--> cytpe: 大写字符串，即请求的方式类型
+
+			request对象.path
+				--> ctype: 字符串，即请求的路径（包括服务器配置的请求路径，但不包括协议、域名和查询字符串）
+
+			request对象.path_info
+				--> ctype: 字符串，即请求的路径（不包括服务器配置的请求路径，也不包括协议、域名和查询字符串）
+
+			request对象.get_full_path()
+		        --> ctype: 字符串，即返回完整的请求路径（相当于 对象.path + 查询字符串部分）
+
+		    request对象.build_absolute_uri(location)
+		        --> ctype: 字符串，即根据location生成绝对路径（包括协议、域名）；
+		                          如果location未指定，则location = 对象.get_full_path()
+
+			request对象.META
+				--> ctype: 类字典对象，即可用的请求头内容（可用的范围取决于客户端和服务器端的协议）
+
+			request对象.body
+				--> ctype: 字节对象，即原始的请求体内容
+
+				request对象.GET
+					--> ctype: 类字典对象，即GET请求的所有参数
+				request对象.POST
+					--> ctype: 类字典对象，即POST请求的所有参数
+
+					request对象.GET/.POST -> 都是QueryDict()对象，除常规字典的方法外还拥有：
+					.copy()
+						--> ctype: 深拷贝副本，即默认.GET/.POST是不可变对象，深拷贝后的副本为可变对象；
+
+					.getlist(key, default=None)
+						--> ctype: 列表，即获取.GET/.POST中指定key的值（该值通常有多个）
+
+			request对象.content_type
+				--> ctype: 字符串，即请求的MIME类型
+
+			request对象.COOKIES
+				--> ctype: 类字典对象，即请求的所有Cookie（键、值都为字符串类型）
+
+			request对象.FILES
+				--> ctype: 类字典对象，即请求的上传文件（键为input type='file'标签的name属性值，值为Django中的UploadedFile对象）
+						   形如：{'字段1': UploadedFile对象, '字段2': UploadedFile对象, ...}
+						   实际的文件数据 = 对象.FILES['字段']
+			    .chunks(chunk_size=None)
+			        --> cytpe: 生成器 ,即分块后的文件对象，不直接使用.read()是为了避免文件过大一次性读取导致内存溢出
+			                  分块后的文件对象可以被循环遍历，从而保存
+			    .name
+			   	    --> ctype: 字符串 ,即返回文件对象的名字（含后缀名）
+
+			    .size
+			        --> ctype: 即返回文件对象的大小（单位：字节）
+
+			    .content_type
+			        --> ctype: 即返回文件对象的MIME类型（不要直接相信，应该验证一下）
+
+			    .charset
+			        --> ctype: 即对于 text/* 类文件的字符集（不要直接相信，应该验证一下）
+
+			request对象.session
+				--> ctype: 类字典对象，即多用于设置请求的session（源自SeesionMiddleware中间件）
+
+			request对象.site
+			    --> ctype: Site或RequestSite对象，即（源自CurrentSiteMiddleware中间件）
+
+			request对象.user
+			    --> ctype: AUTH_USER_MODEL对象，即（源自AuthenticationMiddleware中间件）
+
+			request对象.is_secure()
+				--> ctype: True/False，即请求是否是HTTPS协议（如果是，则返回True）
+
+			request对象.is_ajax()
+				--> ctype: True/False，即请求是否是通过ajax发送的（如果是，则返回True）
+
+			request对象.get_signed_cookie(key, default=RAISE_ERROR, salt='', max_age=None)
+				--> ctype: 字符串/default值/异常，即获取一个签名Cookie的值；
+				           如果签名Cookie无效且设置了default参数，则返回default参数的值，否则raise django.core.signing.BadSignature异常；
+
+		7.2 HttpResponse对象
+
+			HttpResponse(...)
+				--> 类流对象 & 类文件对象 & 类字典对象
+				--> ...可以是字符串，也可以是迭代器(会立即迭代所有内容，然后作为字符串保存起来)
+
+			response对象.content
+				--> ctype: 字节对象，即编码后的响应内容；
+
+				response对象.getvalue()
+					--> ctype: 字节对象，即获取.content的内容；
+
+			response对象.charset
+				--> ctype: 字符串，即响应内容依据的编码格式；
+
+			response对象.status_code
+				--> ctype: 数字，即响应的状态码；
+
+			response对象.has_header(header)
+				--> ctype: True/False，即判断响应中是否具有header(响应头字符串)；
+
+			response对象.setdefault(header, value)
+				--> ctype: 值，即如果header未被设置，设置它的值为value；
+
+			response对象.set_cookie(key, value='', max_age=None, expires=None, path='/', domain=None, secure=None, httponly=False)
+				--> ctype: None，即设置响应的Cookie；
+				--> max_age  ,即None/数字(单位：秒)，即响应Cookie的过期时间；
+				              当expires参数未指定时，应用max_age参数；
+				--> expires  ,即datetime对象或格式化字符串"Wdy, DD-Mon-YY HH:MM:SS GMT"；
+				              当expires参数为datetime对象时，也会应用max_age参数；
+				--> domain   ,即当设置跨域Cookie时，才会指定domain参数为对应的域名；
+				--> httponly ,即若为True，则会防止客户端代码操作Cookie；
+
+			response对象.set_signed_cookie(key, value, salt='', max_age=None, expires=None, path='/', domain=None, secure=None, httponly=False)
+				--> ctype: None，即设置签名Cookie，配合request对象.get_signed_cookie()方法使用；
+
+
+			from django.http import JsonResponse, FileResponse, HttpResponseRedirect, ...
+
+				JsonResponse(data, encoder=DjangoJSONEncoder, safe=True, json_dumps_params=None, **kwargs)
+					--> ctype: JsonResponse对象，即HttpResponse的子类，默认响应头字段Content-Type设置为'application/json'；
+			        --> data ,即响应内容，建议为dict字典类型，如果不是，需要指定safe=False，否则会raise TypeError；
+			        --> encoder ,即指定JSON编码器；
+			        --> safe ,即当data不是dict字典类型是，需要设置为False；
+
+				FileResponse(file对象)
+					--> ctype: FileResponse对象，即StreamingHttpResonse的子类；
+					--> file对象 ,即二进制模式的类文件对象，例如open('xxx', mode='r')，该类文件对象会自动关闭；
+
+				HttpResponseRedirect()
+					--> ctype: HttpResponseRedirect对象，即HttpResponse的子类，对应状态码302；
+				...
+
+	8.操作Session
+
+		· Django默认开启了Session（查看setting.py文件中MIDDLEWARE变量的值，其中应该含有'django.contrib.sessions.middleware.SessionMiddleware'）
+
+		· Django默认将Session保存到数据库中，你可以配置到其他地方，例如：
+		  	a) 默认保存到数据库中，本质上：在setting.py文件的INSTALLED_APPS变量中添加'django.contrib.sessions'，然后执行migrate操作
+
+	        b) 保存到缓存中，本质上：先配置缓存，然后选择Session使用的缓存，最后配置SESSION_ENGINE
+
+			   1) 配置缓存（在setting.py文件中配置CACHES的值，包括'default'在内可以配置多个缓存别名）
+				  # 将缓存配置在Memcached中(Memcached的优点之一是可以配置多台服务器用于缓存)
+				  CACHES = {
+				      'default': {
+				          'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
+	        			  'LOCATION': [
+	        			  	  '127.0.0.1:11211',
+	        			      '172.19.26.240:11211',
+	            			  '172.19.26.242:11211',
+	            	      ]
+	            	      ..options..
+				      },
+				      ...
+				  }
+
+				  # 将缓存配置在Pylibmc中
+				  CACHES = {
+				      'default': {
+				          'BACKEND': 'django.core.cache.backends.memcached.PyLibMCCache',
+	        			  'LOCATION': '127.0.0.1:11211',
+	        			  ..options..
+				      },
+				      ...
+				  }
+
+				  # 将缓存配置在Redis中
+				  CACHES = {
+					  'default': {
+					      'BACKEND': 'django_redis.cache.RedisCache',
+			              'LOCATION': ['redis://127.0.0.1:6379/数据库ID',           # 'redis://[:password]@localhost:6379/0'
+				          			   'redis://127.0.0.1:6380/数据库ID',
+				          			   ...
+				          			  ],
+				          'OPTIONS': {   										     'rediss://[:password]@localhost:6379/0'
+				              'CLIENT_CLASS': 'django_redis.client.DefaultClient',   'unix://[:password]@/path/to/socket.sock?db=0'
+					          'PASSWORD': '你的密码',
+					      }
+			  	      },
+			  	      ...
+				  }
+
+				  # 将缓存配置在数据库中
+				  CACHES = {
+					  'default': {
+					      'BACKEND': 'django.core.cache.backends.db.DatabaseCache',
+				          'LOCATION': '数据库表名',
+				          ..options..
+					  },
+					  ...
+			      }
+
+			      # 将缓存配置在文件中（绝对路径通常是 -> os.path.join(BASE.DIR, '项目级缓存文件夹的绝对路径')
+				  CACHES = {
+					  'default': {
+					      'BACKEND': 'django.core.cache.backends.filebased.FileBasedCache',
+			              'LOCATION': '系统级缓存文件夹的绝对路径',
+			              ..options..
+				      },
+				      ...
+			      }
+
+			      # 将缓存配置在本机内存中（如果只配置一个本机内存，则'LOCATION'可以省略；否则，取名字用于区别即可）
+			      CACHES = {
+					  'default': {
+					      'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+				          'LOCATION': '随意的名字',
+				          ..options..
+					  }
+			      }
+
+			      # 缓存配置的options参数
+			      'TIMEOUT'    --> 设置缓存的超时时间，默认是300（单位：秒）；如果为None，则不超时；如果为0，则不缓存；
+				  'KEY_PREFIX' --> 设置缓存key的前缀名，用于避免多台服务器之前缓存key重名；
+				  'OPTIONS'    --> 任何应该传入缓存后端的数据，通常是第三方库的设置参数；
+
+				  # 缓存应用的3个级别
+				  全站缓存
+					  1. 设置中间件(一个开头，一个结尾)
+					  MIDDLEWARE = [
+						  'django.middleware.cache.UpdateCacheMiddleware',
+						  ...,
+						  ...,
+				          'django.middleware.cache.FetchFromCacheMiddleware',  # 借助CACHE_MIDDLEWARE_SECONDS为每个Response添加了Expires和Cache-Control响应头
+					  ]
+
+					  2. 设置settings.py文件
+					  CACHE_MIDDLEWARE_ALIAS        --> 每个页面缓存使用的'别名'
+					  CACHE_MIDDLEWARE_SECONDS      --> 每个页面缓存的超时时间（单位：秒）
+
+				  视图缓存
+				  	  1. 配置在视图函数
+				  	  from django.views.decorators.cache import cache_page
+
+				  	  @cache_page(超时时间, cache='缓存别名')
+				  	  def xx_view(request):
+				  	      pass
+
+				  	  2. 配置在urlpatterns路由
+				  	  from django.views.decorators.cache import cache_page
+
+				  	  urlpatterns = [
+				  	      path('xx', cache_page(超时时间, cache='缓存别名')(views), xx),
+				  	      ...,
+				  	  ]
+
+				  模板缓存
+					  1. 先插入{% load cache %}模板标签
+					  2. 设置{% cache 超时时间 缓存key using='缓存别名' %}    --> 超时时间可以是数字，也可以是一个指向数字的变量；
+					         ...    										 缓存key可以随意起；
+					         ... 											 using必须是最后一个参数，指定缓存的储存位置；
+					         ...      			 		                 --> 要被缓存的具体内容
+					        {% endcache %}                               --> 模板的结束标签
+
+			   2) 指定Session使用的缓存
+			      默认使用'default'别名的缓存；
+			      如果想指定其他的缓存后端，设置SESSION_CACHE_ALIAS = '其他缓存别名'
+
+			   3) 配置SESSION_ENGINE
+	  			  SESSION_ENGINE = 'django.contrib.sessions.backends.cache'      --> 应用配置的缓存来保存session
+			      SESSION_ENGINE = 'django.contrib.sessions.backends.cached_db'  --> 写入session到缓存中的同时也会写入到数据库；
+			      																     读取session先从缓存中读取，没有再从数据库中读取；
+
+			c) 保存到文件中，本质上：SESSION_ENGINE = 'django.contrib.sessions.backends.file'
+	           然后，再配置储存缓存的文件夹路径，即SESSION_FILE_PATH = '系统级session文件夹的绝对路径'
+
+	        d) 保存到Cookie中，本质上：SESSION_ENGINE = 'django.contrib.sessions.backends.signed_cookies'
+			   然后，使用SECRET_KEY变量签名加密放到客户端的Cookie中
+
+			e) 保存到Redis中，本质上：SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
+	           然后，指定Redis缓存所对应的'别名'，即SESSION_CACHE_ALIAS = 'Redis缓存别名'
+
+		· Django开启session中间件后，所有视图函数接收的第一个参数request中都包含.session属性，该属性是一个session对象（继承自SessionBase类）；
+		  它除了标准的Python字典方法外，还包括以下方法：
+		  session对象.flush()
+		      --> 删除当前的session数据，以及Cookie中的session
+		          相比标准的Python字典用法: session对象.clear()，它额外能够删除Cookie中的session
+
+		  session对象.set_test_cookie()
+		  	  --> 测试浏览器（即客户端）是否支持了Cookie功能，该方法无法立即得到测试结果，必须等待浏览器下次发送请求时才可以
+
+		  session对象.test_cookie_worked()
+		  	  --> ctype: True/Fasle ,即当前得到浏览器是否接受测试用的Cookie的结果，为此你必须先调用.set_test_cookie()方法
+
+		  session对象.delete_test_cookie()
+		  	  --> 删除测试用的Cookie
+
+		  session对象.set_expiry(value)
+		  	  --> 设置session的超时时间，如果value是一个整数，则表示超时时间为'整数'秒；如果value是datetime或timedelta对象，则表示session到指定的时间后失效
+		  	      如果value为0，则表示用户关闭浏览器后session失效；如果value为None，则表示session遵循全局session的超时配置
+
+		  session对象.get_expiry_age()
+		  	  --> 返回session的超时时间（秒数）
+
+		  session对象.get_expiry_date()
+		      --> 返回session的超时时间（日期）
+
+		  session对象.get_expire_at_browser_close()
+		      --> ctype: True/False，即当前用户的浏览器关闭时，其session是否超时
+
+		  session对象.clear_expired()
+		      --> 清除超时时间小于当前时间的所有session（本质上是一个类方法）
+
+		  session对象.cycle_key()
+		      --> 即为当前session对象的数据赋予一个新的session_key
+
+		  session对象.session_key
+			  --> ctype: 字符串，即返回当前session的key值
+
+		  session对象.session_data
+		      --> ctype: 字符串，即返回包含已编码和序列化的session数据（字典形式）的字符串
+
+		· Django默认使用json格式序列化session数据；
+
+		· Django默认在session的最外层的value值（不包括最外层value值中嵌套的value值）发生改变时'更新'一次；
+		  如果在修改嵌套的key值后也进行'更新'保存，可以设置request.session.modified = True；
+
+		· Django默认回传session的Cookie，是在session被创建或修改时；如果设置SESSION_SAVE_EVERY_REQUEST = True，
+		  则Django会对每个请求都'更新'保存一次session（也意味着设置的超时时间会重新计算），并回传对应的Cookie
+
+	    · Django底层使用SessionStore类（继承自SessionBase类）的实例来保存session信息；
+	      除了正常的字典用法来动态添加session数据，它还具有以下方法：
+		      from django.contrib.sessions.backends.db import SessionStore
+
+		      SessionStore().create()
+		          --> 父类SessionBase中未实现，子类必须实现该方法
+		          --> 向SessionStore()对象中写入一个新的session_key，用于映射当前保存的session数据；
+		              本质上，这一个过程是生成一个的session_key，再调用.save()方法；
+		              如果生成的session_key与其他已存在的session_key碰撞，'生成-调用'的过程会一直循环，直到生成的session_key是唯一的；
+			      SessionStore().save()
+			          --> 父类SessionBase中未实现，子类必须实现该方法
+			          --> 该方法将SessionStore()对象中的session数据保存起来
+
+		      SessionStore().load()
+		          --> 父类SessionBase中未实现，子类必须实现该方法
+		          --> 该方法将SessionStore()对象中的session_data解码后返回，返回值是字典类型
+
+		      SessionStore().delete(session_key)
+		          --> 父类SessionBase中未实现，子类必须实现该方法
+		          --> 该方法删除指定的session
+
+		      SessionStore().exists(session_key)
+		          --> 父类SessionBase中未实现，子类必须实现该方法
+		          --> ctype: True/False ,即指定的session是否存在
+
+		      SessionStore().clear_expired()
+		          --> 父类SessionBase中未实现，子类必须实现该方法
+		          --> 该方法清楚超时时间小于当前时间的所有session（本质上是一个类方法）
+
+		· 在settings.py文件中的Session配置
+			  SESSION_CACHE_ALIAS 	                --> 默认：'default'，即配置session使用的缓存别名
+			  SESSION_COOKIE_AGE 					--> 默认：'1209600'，即配置Cookie中session的超时时间（单位：秒，默认为2周）
+			  SESSION_COOKIE_DOMAIN    				--> 默认：None，即配置session Cookie允许的域
+			  SESSION_COOKIE_HTTPONLY 				--> 默认：True，即配置是否在Set-Cookie中添加HTTPOnly标志，如果为True，则添加；
+			                                                       虽然该功能不被所有的浏览器支持，但能够很好的防止客户端的JS脚本访问session Cookie
+			  SESSION_COOKIE_NAME 					--> 默认：'sessionid'，即配置Cookie中session对应的名字
+			  SESSION_COOKIE_PATH                   --> 默认：'/'
+			  SESSION_COOKIE_SECURE                 --> 默认：False，即配置是否使用安全Cookie来发送session；如果为True，则浏览器只会在HTTPS链接下发送Cookie
+			  SESSION_ENGINE                        --> 默认：'django.contrib.sessions.backends.db'，即配置session的引擎
+			  SESSION_EXPIRE_AT_BROWSER_CLOSE 		--> 默认：False，即配置用户在关闭浏览器时是否让session超时
+			  SESSION_FILE_PATH                     --> 默认：None，即当session配置为文件储存时，储存session的文件夹路径
+			  SESSION_SAVE_EVERY_REQUEST            --> 默认：False，即配置是否每个请求都更新保存一遍session
+			  SESSION_SERIALIZER                    --> 默认：'django.contrib.sessions.serializers.JSONSerializer'，即配置序列化session的类路径
+
+
+模型操作
+------------------------------
+	· Django中的ORM是'代码优先'的，即根据编写的类来创建对应的数据库表及其他信息（另外一种是'数据库优先')
+
+	· Django中的model类的每个对象都对应数据库表中的一行，对象的每个属性都对应一个字段
+
+	· Django中的model都被定义为继承自django.db.models.Model的一个Python类
+		a) from django.db import models
+
+		   class xx(models.Model):
+		   		...
+		   		...
+		   		...
+		   		class Meta: 					  # 通过 model实例._meta.xx 来访问内嵌Meta类中的xx属性
+		   			abstract = True/False         --> 如果为True，则表示当前的模型类为父类，将被其他的模型类(即子类)所继承；
+		   			                                  当前的模型类属于抽象基类，无法被实例化，自然也没有对应的数据库表（无法保存数据）；
+		   			                                  当前的模型类中的字段会在子类实例化时写入子类对应的数据库表中，这意味着当前的模型类和子类之间不允许出现重复的字段；
+		   			                                  当前的模型类属于抽象基类，这意味着某些内嵌Meta类的属性即使设置了也毫无用处，例如：db_table；
+
+		   			proxy = True/False            --> 如果为True，则表示当前的模型类为子类，继承自某个父类并成为该父类的代理model；
+		   			                                  当前的模型类（即子类）和它的父类共用同一张数据库表，这意味着虽然访问数据库表的代码不同，但操作的是相同的数据；
+		   			                                  当前的模型类（即子类）必须继承自'非抽象基类'；
+		   			                                  代理model通常用于改变排序和manager等无关数据库级别（而只是Python方面）的操作；
+
+		   			app_label = 'app名字'          --> 如果当前模型类所在的APP没有位于INSTALLED_APPS中，则必须声明它位于'app名字'APP中；
+
+					base_manager_name = 'xx'      --> _base_manager模型类的manager名字（重点）
+
+					default_manager_name = 'xx'   --> _default_manager模型类的manager名字
+
+					db_table = 'xx'               --> 当前模型类的数据库表名
+
+					db_tablespace = 'xx'          --> 当前模型类的数据库表空间名
+
+					default_related_name          --> 当前模型类中外键字段关联的对象回溯创建外键的对象的'接口'，默认为'创建外键的模型类名_set'
+
+					ordering = ['-/?xx', ...]     --> 当前模型类中'xx', ...等字段的默认排序方式
+
+					indexes = [ 				  --> 当前模型类中需要创建索引的(一个或多个)字段
+						models.Index对象,              --> models.Index(fields=['字段名', '字段名', ...], name='索引名')
+						...
+					]
+
+					unique_together = (('字段名', '字段名', ...), ...)	--> 当前模型类中需要创建唯一索引的(一个或多个)字段
+
+	       model的第二种继承方式（多表继承）：
+	       · 子类继承自父类（非抽象基类），子类和父类各自维护自己对应的数据库表，继承关系通过Django自动创建的OneToOneField字段来维系；
+	         继承关系可以通过related_name属性来回溯，同时注意：创建其他的关系字段时，必须指定related_name属性，因为默认的related_name属性已经被OneToOneField字段占用了）；
+	       · 子类可以访问/操作父类的字段，只不过是这些字段的数据实际储存在父类对应的表中（而不是子类对应的表中）；
+	       · 子类继承自父类（非抽象基类），这意味着实例化子类会自动实例化父类，但反过来实例化父类不会自动实例化子类；
+
+	· Django中定义了model类后需要将其迁移至数据库中，为此你需要：
+		a) 注册APP（在settings文件中找到INSTALLED_APPS变量）
+			INSTALLED_APPS = {
+				...,
+				'加上你的APP的名字'
+			}
+		b) 生成迁移文件（在终端键入python3 manage.py makemigrations）
+		c) 根据迁移文件执行数据库操作（在终端键入python3 manage.py migrate）
+
+	· Django中一个APP中通常只有一个models.py文件，如果想配置多个models.py文件，可以借助models包：
+	    a) 删掉models.py文件，在当前APP下创建models文件夹
+	    b) 在models文件夹中创建__init__.py、你想配置的多个models.py文件
+		c) 在上述__init__.py文件中逐个导入多个models.py文件中的模型类名（不推荐from xx import *的写法）
+
+	· Django中的数据库配置
+		a) 在setting.py文件中设置DATABASES变量的值，例如：
+
+		   DATABASES = {
+		       'default': {
+		           options选项
+		       },
+
+		       '数据库别名': {
+				   options选项
+		       },
+		       ...
+		   }
+
+		   - default别名不能变更，其他的数据库别名可以随意起，建议见名知意；
+		   - options选项有很多，建议按照需求配置；
+
+				'ENGINE': ''(默认)/'数据库引擎',           --> 'django.db.backends.postgresql'
+														    'django.db.backends.mysql'
+															'django.db.backends.sqlite3'
+															'django.db.backends.oracle'
+		     	'HOST': ''(默认)/'主机名',                --> 默认为''空字符串，即本机localhost
+				'PORT': ''(默认)/'端口号',                --> 默认为''空字符串，即默认端口
+				'USER': ''(默认)/'用户名'
+		     	'PASSWORD':  ''(默认)/'密码',
+				'NAME': ''(默认)/'数据库名',
+		     	'ATOMIC_REQUESTS': False(默认)/True,     --> 如果为True，则将该数据库对应的视图函数操作封装到一个事务中
+		     	'AUTOCOMMIT': True(默认)/False,
+				'TIME_ZONE': None(默认)/'Asia/Shanghai', --> 设置该数据库中操作日期类对象所依据的时区
+				'CONN_MAX_AGE': 0(默认)/秒数/None,        --> 默认为0，表示每个请求过后关闭数据库连接；
+				      								 	     None，表示不限制数据库连接时间（即持续连接）
+		b) 数据库的同步
+	       migrate命令一次只能操作一个数据库；大部分的命令也是如此，通过'--database=数据库别名'操作指定的数据库
+		       python3 manage.py migrate                      --> 操作默认的数据库
+		       python3 manage.py migrate --database=数据库别名  --> 操作指定的数据库
+
+		   但是，makemigrations命令不同，它默认操作default别名的数据库（即默认数据库），
+		   如果想操作其他的数据库，需要借助'数据库路由'的allow_migrate()方法；
+
+	    c) 数据库路由
+		   配置数据库路由，会为不同的数据库操作指定对应的数据库
+		   步骤1：创建数据库路由类，每个类最多需要提供4个方法；
+	       	   def db_for_read(self, model, **hints):
+			       return '指定数据库别名'/none
+
+			   def db_for_write(self, model, **hints):
+			       return '指定数据库别名'/none
+
+			   def allow_relation(obj1, obj2, **hints):
+			   	   return True/False
+
+			   def allow_migrate(db, app_label, model_name=None, **hints):
+			   	   return True/False/none
+
+		   步骤2：在setting.py文件中配置DATABASE_ROUTERS变量的值；
+		       DATABASE_ROUTERS = [
+	     	       '导入数据库路由类1的路径',
+	     	       '导入数据库路由类2的路径',
+	     	       ...
+		       ]
+
+	1.模型类的字段类型
+
+		1.1 **option参数（部分常用）
+
+			primary_key = True/False
+				--> 是否将当前字段在数据库中设置为主键；如果为True，则设置为主键；
+				--> 如果未指定任何字段为primary_key，则Django自动创建一个AutoField字段作为主键；
+				--> primary_key 等价于 null = False 和 unique = True
+
+			blank = False(默认)/True
+				--> 是否允许当前字段在数据库中存在空值；如果为True，则允许存在；
+
+			null = False(默认)/True
+				--> 是否允许当前字段在数据库中的值为空；如果为True，则允许为空；
+				--> 避免str类字段的null为True；因为如果为True，则空字符串和null都可以表示无数据；
+				--> 如果允许字段存在空值，则应该将blank设置为True；
+
+			unique = True/False
+				--> 是否将当前字段值在数据库中设置为唯一；如果为True，则当前字段值在整列中的唯一的；
+				    如果当前字段被其他model类的外键所关联，则必须设置为unique=True；
+
+			default = 值/callable对象
+				--> 为当前字段在数据库中的值设置默认值
+				--> 如果设置为值，则必须是不可变类型；如果设置为callable对象，则不能是匿名函数（每次创建对象时，调用一次该函数）
+
+			editable = True(默认)/False
+			    --> 当前字段是否在【后台管理】和【表单渲染】中出现，是否会被表单验证
+			    --> 如果为False，则当前字段不会出现，也不会被验证
+
+			db_tablespace
+				--> 为当前字段的索引创建表空间
+
+			db_column = '列的别名'
+				--> 为当前字段在数据库中设置对应的列名（数据库中默认的别名就是当前字段名）
+
+			db_index = True/False
+				--> 是否为当前字段在数据库中创建对应的索引
+
+			verbose_name = 'xxx'
+				--> 字段详情，为字段名增加可读性；如果未指定，则Django自动将当前字段名作为verbose_name（字段名中的'_'会被转换成' '）
+
+		1.2 Field类型(即Field的子类)
+
+			from django.db import models   // 是 from django.db.models import fields 的shortcut
+
+			models.AutoField(options)
+				--> 设置自增字段
+
+			models.BigAutoField(options)
+				--> 设置64位整数的AutoField（值为1 ~ 2**63-1)
+
+			models.SmallIntegerField(options)
+				--> 设置16位整数的字段（值为-2**15 ~ 2**15-1），-3万 ~ 3万左右
+
+			models.IntegerField(options)
+				--> 设置32位整数的字段（值为-2**31 ~ 2**31-1），-21亿 ~ 21亿左右
+
+			models.BigintegerField(options)
+				--> 设置64位整数的字段（值为-2**63 ~ 2**63-1）
+
+			models.DecimalField(max_digits=None, decimal_places=None, options)
+				--> 设置精确小数字段（max_digits指定总宽度，decimal_palces指定小数位数）
+
+			models.FloatField(options)
+				--> 设置浮点数字段
+
+			models.BooleanField(options)
+				--> 设置布尔字段
+				--> 值为true/false
+
+			models.NullBooleanField(options)
+				--> 设置布尔字段
+				--> 值为true/false/null
+
+			models.CharField(max_length=None, options)
+				--> 设置字符串字段
+				--> max_length为当前字段的字符长度
+
+			models.URLField(max_length=200, options)
+				--> 设置URL字段
+
+			models.TextField(options)
+				--> 设置文本字段
+
+			models.EmailField(max_length=254, options)
+				--> 设置邮件字段
+
+			models.UUIDField(**options)
+				--> 生成UUID字段
+
+			models.FileField(upload_to=None, max_length=100, options)
+				--> 设置上传文件字段
+				--> upload_to ,字符串类型（即相对于MEDIA_ROOT的相对路径）
+
+			models.ImageField(upload_to=None, height_field=None, width_field=None, max_length=100, options)
+				--> 设置上传图片字段（前提需要Pillow库）
+
+			models.SlugField(max_length=50, options)
+				--> 设置数字、字母、下划线和连字符
+
+			models.DateField(auto_now=False, auto_now_add=False, options)
+				--> auto_now ,仅限对象通过 model对象.save() 方式保存时，将当前字段的值设置为当前时间
+				--> auto_now_add ,当对象第一次创建时，将当前字段的值设置为当前时间
+
+			models.DateTimeField(auto_now=False, auto_now_add=False, options)
+				--> auto_now ,仅限对象通过 model对象.save() 方式保存时，将当前字段的值设置为当前时间
+				--> auto_now_add ,当对象第一次创建时，将当前字段的值设置为当前时间
+
+			models.TimeField(auto_now=False, auto_now_add=False, **options)
+				--> auto_now ,仅限对象通过 model对象.save() 方式保存时，将当前字段的值设置为当前时间
+				--> auto_now_add ,当对象第一次创建时，将当前字段的值设置为当前时间
+
+			models.GenericIPAddressField(protocol='both', unpack_ipv4=False, options)
+				--> 设置IPv4或IPv6字段
+
+			models.ForeignKey(to, on_delete, options)
+				--> 设置多对一关系字段（即外键）
+				--> to='关联的模型类名'；如果是自关联，则to='self'；如果是关联其他APP中的模型类，则to='APP名.模型类名'
+				--> on_delete=常量，用于设置当外键关联的对象被删除时，数据库如何操作：
+				             =models.CASCADE     -> 删除创建外键的对象
+				             =models.PROTECT     -> 抛出ProtectedError异常来阻止外键关联的对象被删除
+				             =models.SET_NULL    -> 将创建外键的对象的字段值设置为null（前提外键字段允许值为空，即null=True）
+				             =models.SET_DEFAULT -> 将创建外键的对象的字段值设置为默认值（前提外键字段设置了默认值，即default=xx）
+				             =models.SET(值/函数) -> 将创建外键的对象的字段值设置为传入SET()的值或传入函数执行后返回的值
+
+				--> options:
+						related_name        --> 外键关联的对象回溯创建外键的对象时使用的变量名
+						                        如果该变量名设置为'+'或以'+'结尾，则表示取消外键关联的对象回溯创建外键的对象的功能
+
+						related_query_name  --> 默认值为related_name的值，即外键关联的对象借助该变量名连接创建外键的对象，以便对创建外键的对象进行查询操作
+
+						to_field            --> 默认情况下，外键会关联至主键；如果设置了to_field，则会关联至指定的字段（该字段必须unique=True）
+
+			models.ManyToManyField(to, options)
+
+			models.OneToOneField(to, on_delete, parent_link=False, options)
+
+	2.模型类的查询操作
+
+		2.1 查询操作须知
+
+			a) Django中借助模型类的类属性Manager（默认名为objects）作为'代码'和'数据库'的接口，
+			   再通过类属性Manager调用各种方法来完成数据库操作（得到的结果为QuerySet对象），形如：models.模型类名.objects.xxx；
+			   修改默认名objects可以通过在模型类中定义类属性，新名字 = models.Manager()，形如：models.模型类名.新名字.xxx；
+
+			b) 获取QuerySet对象的操作是'惰性的'，只有当使用QuerySet对象时才会真正去数据库中执行之前的获取操作；
+			   当你对获取的QuerySet对象进行：迭代、有步长的分片、序列化、缓存、repr()打印操作、len()长度获取、list()类型转换和bool()真假值判断等操作时，会真正去数据库中执行操作；
+
+			c) 注意QuerySet缓存的存在，获取QuerySet对象时，如果能从QuerySet缓存中拿到就不再执行数据库操作重新获取；
+	           最开始QuerySet缓存为空，随着不断地获取QuerySet对象，不断地真正执行数据库操作，QuerySet缓存开始建立；
+	           如果想对同一个获取的QuerySet对象操作，应该使用变量保存起来；
+
+	    2.2 操作详解
+
+	    	2.2.1 **kwargs参数（即数据库的where查询）
+	    		字段__exact=xx
+	    			--> 刚好为xx
+
+	    		字段__iexact=xx
+	    			--> 刚好不为xx
+
+	    		字段__contains=xx
+	    			--> 包含xx（即模糊查询）
+
+	    		字段__icontains=xx
+	    			--> 不包含xx
+
+				字段__range=(xx,xx)
+					--> 是xx到xx之间
+
+	    		字段__in=[xx,xx,xx,...]
+	    			--> 是xx或xx或xx或...
+
+	    		字段__gt=xx
+	    			--> 大于xx
+
+	    		字段__gte=xx
+	    			--> 大于或等于xx
+
+	    		字段__lt=xx
+	    			--> 小于xx
+
+	    		字段__lte=xx
+	    			--> 小于或等于xx
+
+	    		字段__startswith=xx
+	    			--> 以xx开头
+
+	    		字段__istartswith=xx
+	    			--> 不以xx开头
+
+	    		字段__endswith=xx
+	    			--> 以xx结尾
+
+	    		字段__iendswith=xx
+	    			--> 不以xx结尾
+
+	    		字段__date=xx
+	    			--> 日期是xx（xx是一个对象；可以后加其他的条件，例如: 字段__date__gt=xx）
+
+	    		字段__year=xx
+	    			--> 年份是xx（可以后加其他的条件，例如: 字段__year__gt=xx）
+
+	    		字段__month=xx
+	    			--> 月份是xx（可以后加其他的条件，例如: 字段__month__gt=xx）
+
+	    		字段__week=xx
+	    			--> 周数是xx（可以后加其他的条件，例如: 字段__week__gt=xx）
+
+	    		字段__day=xx
+	    			--> 日子是xx（可以后加其他的条件，例如: 字段__day__gt=xx）
+
+				字段__time=xx
+					--> 时间是xx（xx是一个对象；可以后加其他的条件，例如: 字段__time__gt=xx）
+
+				字段__hour=xx
+					--> 小时是xx（可以后加其他的条件，例如: 字段__hour__gt=xx）
+
+				字段__minute=xx
+					--> 分钟是xx（可以后加其他的条件，例如: 字段__minute__gt=xx）
+
+				字段__second=xx
+					--> 秒数是xx（可以后加其他的条件，例如: 字段__second__gt=xx）
+
+				字段__regex=r'xx'
+					--> 符合表达式xx
+
+				字段__iregex=r'xx'
+					--> 不符合表达式xx
+
+			2.2.2 操作方法
+
+				# models.模型类名.objects 等价于 (...)
+
+				(...).all()
+					--> ctype: QuerySet对象 ,将之前操作得到的QuerySet对象拷贝一份（会真正去数据库执行之前的操作）
+
+		    	(...).filter(**kwargs)
+		    		--> ctype: QuerySet对象 ,筛选出符合**kwargs参数的对象
+
+		    	(...).exclude(**kwargs)
+		    		--> ctype: QuerySet对象 ,筛选出不符合**kwargs参数的对象
+
+		    	(...).order_by(*fields)
+		    		--> ctype: QuerySet对象 ,将之前操作的结果按照一个或多个字段依次排序
+		    		--> +/-/?字段名 ,在字段名前面加上+表示按该字段升序排序，-表示按该字段降序排序，?表示按该字段乱序排序
+		    		--> 如果字段名涉及跨表（即跨模型类），则应该写作'外键字段__字段名'（双下划线）
+		    		--> 如果有多个order_by(...)，则按照最后一个order_by中的字段排序，之前的order_by全部无效
+
+				(...).select_related(*fields)
+					--> ctype: QuerySet对象 ,即获取外键字段所在表的信息，多用于跨表查询，减少访问数据库的次数、提高性能
+					--> fields ,是外键字段
+
+				(...).prefetch_related(*lookups)
+					-->
+
+				(...).reverse()
+					--> ctype: QuerySet对象 ,将之前操作的结果倒置
+					--> 之前操作的结果应该是经历过排序的（例如，order_by()），否则该方法无效
+					--> Django不支持列表中的从后往前分片，所以该方法多用于取查询结果中最后的多个值
+
+				(...).distinct(*fields)
+					--> ctype: QuerySet对象 ,将之前操作的结果（一般是order_by之后）按照一个或多个字段去重
+
+				(...).union(*other_qs, all=False)
+					--> ctype: QuerySet对象 ,将之前操作的结果与一个或多个QuerySet对象取并集，默认按值去重（如果想保留重复的值，将all=True）
+
+				(...).intersection(*other_qs)
+					--> ctype: QuerySet对象 ,将之前操作的结果与一个或多个QuerySet对象取交集
+
+				(...).difference(*other_qs)
+					--> ctype: QuerySet对象 ,将之前操作的结果与一个或多个QuerySet对象取差集
+
+				(...).values(*fields, **expressionns)
+					--> ctype: 字典形式的QuerySet对象 ,将之前操作的结果以字典形式返回
+					--> 形如：<QuerySet [{'blog_id': 1, 'headline': 'First Entry', ...}, ...]>
+											字段名         字段名
+
+				(...).values_list(*fields, flat=False, named=False)
+					--> ctype: 列表形式的QuerySet对象 ,将之前操作的结果以列表（内嵌元组）形式返回
+					--> 形如：<QuerySet [(1, 'First entry'), ...]>
+					                   字段值   字段值
+					--> 如果flat=True，则将单个字段的操作以列表形式返回
+							 <QuerySet [1, 2, 3, ...]>
+			        --> 如果named=True，则将之前操作的结果以内嵌命名元组的列表形式返回
+			        		 <QuerySet [Row(id=1, headline='First entry'), ...]>
+
+				(...).get(**kwargs)
+					--> ctype: None ,筛选出符合**kwargs参数的一个对象，
+					--> 如果没有符合的对象，则抛出ObjectDoesNotExist异常；
+					    如果符合的对象不止一个，则抛出MultipleObjectsReturned异常；
+
+				(...).create(**fields)
+					--> ctype: None ,创建并保存一个对象的便捷方法
+					--> models.模型类名.objects.create(字段名='xx', 字段名='xx', ...)
+						等价于
+					    obj = 模型类名(字段名='xx', 字段名='xx', ...)
+					    obj.save()
+
+				(...).update(**fields)
+					--> ctype: 数字 ,更新之前操作的结果中的内容，并返回成功的个数
+					--> 该方法只能更新当前表的字段，无法直接更新跨表的字段（如果涉及跨表更新，则需要借助跨表的字段得到一个结果，将这个结果.update）
+					--> 该方法是数据库级别的操作，不是先获取之前操作的结果，再将结果对象的属性修改，最后.save()，所以该方法不会触发'信号'操作
+
+				(...).get_or_create(defaults=None, **kwargs)
+					--> ctype: 元组(object, created) ,优先查询符合**kwargs参数的对象，如果有则返回(obj, False)；
+								                     如果没有，则根据**kwargs参数和defaults参数创建一个，并返回(obj, True)；
+					--> 该方法如果找到多个结果，则抛出MultipleObjectsReturned异常；
+					--> defaults参数是一个字典类型，方法的执行等价于：
+					    try:
+					    	(...).get(**kwargs参数)
+					    except DoesNotExist:
+					    	(...).create(**kwargs参数, **defaults参数)
+
+				(...).update_or_create(defaults=None, **kwargs)
+					--> ctype: 元组(object, created) ,优先使用defaults参数更新符合**kwargs参数的对象，如果有则返回(obj, False)；
+													 如果没有，则根据**kwargs参数和defaults参数创建一个，并返回(obj, True)；
+					--> defaults参数是一个字典类型
+
+				(...).delete()
+					--> ctype: 元组(生效个数, 详情字典) ,将之前操作的结果全部删除
+
+				(...).count()
+					--> ctype: 数字 ,即返回之前操作的结果一共有多少个
+
+				(...).earliest(*fields)
+					--> ctype: object ,即根据一个或多个字段返回最早的一个，如果不存在抛出DoesNotExist异常
+
+				(...).latest(*fields)
+					--> ctype: object ,即根据一个或多个字段返回最晚的一个，如果不存在抛出DoesNotExist异常
+
+				(...).first()
+					--> ctype: object/None ,即从之前操作的结果中取第一个结果；如果之前操作的结果为空，则返回None
+
+				(...).last()
+					--> ctype: object/None ,即从之前操作的结果中取最后一个结果；如果之前操作的结果为空，则返回None
+
+				(...).exists()
+					--> ctype: True/False ,即之前操作的结果是否存在对象，如果存在则返回True，否则返回False
+
+				(...).using('其他数据库别名')
+					--> 将之前操作的结果应用于其他的数据库中，而不是默认的数据库
+
+
+表单处理
+------------------------------
+	1.在Django中生成Form表单
+
+		a) 创建表单类（包含各种字段）
+	    	from django import forms
+
+			class 表单类(forms.Form):
+				字段1 = forms.字段名1(字段参数)
+				字段2 = forms.字段名2(字段参数)
+				...
+
+		b) 通过视图函数呈现或接受处理表单数据
+			return render(request, 'xx.html', context={'xx': 表单类的实例})    # 'xx'通常是'form'
+
+		   通过模板标签呈现
+		    {{ xx }}               	# <input>和<label>标签构成的渲染内容，对应render()中'xx'的key值（通常是form）
+			    {{ xx.as_table}}         # 调用as_table()方法，即用<tr>标签包裹渲染内容，注意要人为添加<table>标签
+			    {{ xx.as_p }}            # 调用as_p()方法，即用<p>标签包裹渲染内容
+			    {{ xx.as_ul }}           # 调用as_ul()方法，即用<li>标签包裹渲染内容，注意要人为添加<ul>标签
+
+	        {{ xx.字段 }}            # 表单类中的每个字段都可以当作表单实例的一个属性来渲染
+				# {{ xx.字段.label}}      # 表单类实例的某个字段的label值
+				# {{ xx.字段.label_tag }} # 表单类实例的某个字段的用<label>标签包裹后的渲染值
+				# {{ xx.字段.value}}      # 表单类实例的某个字段的值
+				# {{ xx.字段.is_hidden}}  # 模板标签值为True/False，常当作变量用于判断或循环
+				# {{ xx.字段.errors}}     # 渲染结果是用<ul class='errorlist'>标签包裹的任何验证错误的反馈信息
+
+		c) 表单类的实例无参数时，会创建空的表单内容；（无参数的表单类实例称作无约束的表单，即unbound forms）
+	       如果接受参数，则会将参数内容解析并对应表单类中的字段进行验证；（有参数的表单类实例称作有约束的表单，即bound forms）
+
+	       表单类的实例可以通过.is_valid()方法检验参数（即表单的提交数据）是否有效；
+	       如果.is_valid()返回True，则所有有效的数据内容都封装在.cleaned_data属性中；
+
+	    d) 表单的验证详解
+	       当 Form子类实例.is_valid() 或 .full_clean() 或 .errors[指访问属性]时自动完成表单的验证，流程如下：
+
+	                             |-- 调用to_python()       // 接收widget传入的表单原始数据，并将其转换成Python对象，若无法转换raise ValidationError异常；
+	                             |          |
+	                             |         \|/
+	       Field子类实例.clean() --   调用validate()        // 接收转换后的表单数据，并对其过滤(有选择的raise ValidationError，该方法无返回值)；
+	                |            |          |
+	                |            |         \|/
+	                |            |-- 调用run_validators() // 接收过滤后的表单数据，并对其验证(表单验证的核心部分，它将每个字段的异常分别聚合)；
+	                |                       |
+	                |-<--返回cleaned_data--<-|
+	               \|/
+	       Form子类实例.clean_<字段名>()                    // 检测返回的cleaned_data中，字段的值是否是Python对象，然后将cleaned_data返回；
+	                |
+	               \|/
+	       Form子类实例.clean()                           // '指挥'表单的每个字段进行clean_<字段名>()；
+	                |
+	                |---> 若产生ValidationError，以__all__字段之名映射它们(用户可以通过 Form子类实例.non_field_errors() 来访问这些异常)；
+	                |
+	                |---> 若想'更新'原字段中的异常，用户可以通过 Form子类实例.add_error() 来实现；
+	               \|/
+	       最终结果：Form子类实例.cleaned_data
+
+	       说明: 1.可重写方法 .validate() / Field子类实例.clean() / Form子类实例.clean_<字段名>() / Form子类实例.clean()
+	            2.raise ValidationError的注意点：
+	                a) 建议要本地化，例如：ValidationError(_('错误提示'))，而不是直接ValidationError('错误提示')
+	                b) 附上错误代码，例如：ValidationError(_('错误提示'), code='错误代码')
+	                c) 通过字典传参，例如：ValidationError(_('错误:%(value)s'), params={'value': 'xxx'})
+
+	2.Form类中的字段详解
+		from django import forms
+
+		class 表单类(forms.Form):
+			字段 = forms.字段类型(**kwargs)
+			...
+
+			**kwargs参数可以是：
+
+			    label='xxx'           # 为当前字段指定label值
+			    label_suffix='xxx'    # 为当前字段指定label值的后缀
+			    initial='xxx'         # 为当前字段指定初始值（静态创建）
+			    error_messages={...}  # 重写当前字段的错误信息，能够重写哪些错误信息(key:value)详见字段的定义（见下文）
+				help_text='xxx'       # 为当前字段指定帮助文档，当表单被渲染呈现时会紧跟在当前字段后面
+			    required=True/False   # 当前字段是否必须有值（即非空非None值），默认required为True
+				disabled=True/False   # 是否将当前字段设置为不可用状态
+
+				localize=True/False   # 当前字段的值在输入或渲染输出时是否要做转换
+			    validators=[...]      # 为当前字段配置一个或多个验证器
+
+				# from django import forms
+			    widget=forms.插件类名   # widget参数将指定表单input元素的种类，以及input元素中数据的类型
+			                TextInput     --> 输入的数据类型'text'；渲染的结果<input type='text' ...>
+				                DateInput     --> 输入的数据类型'text'；渲染的结果<input type='text' ...>
+							    DateTimeInput --> 输入的数据类型'text'；渲染的结果<input type='text' ...>
+							    TimeInput     --> 输入的数据类型'text'；渲染的结果<input type='text' ...>
+			                PasswordInput --> 输入的数据类型'password'；渲染的结果<input type='password' ...>
+			                NumberInput   --> 输入的数据类型'number'；渲染的结果<input type='number' ..>
+						    EmailInput    --> 输入的数据类型'email'；渲染的结果<input type='email' ...>
+						    URLInput      --> 输入的数据类型'url'；渲染的结果<input type='url' ...>
+						    HiddenInput   --> 输入的数据类型'hidden'；渲染的结果<input type='hidden' ...>
+						    Textarea      --> 渲染的结果<textarea> ... </textarea>
+
+						    RadioSelect   --> 渲染的结果<li><input type='radio' ...></li>
+						    CheckboxInput --> 输入的数据类型'checkbox'；渲染的结果<input type='checkbox' ...>
+						    	CheckboxSelectMultiple --> 渲染的结果<li><input type='checkbox' ...></li>
+						    Select        --> 渲染的结果<select><option>...</option></select>
+								NullBooleanSelect --> 只有Unknown、Yes和No选项的forms.Select插件
+								SelectMultiple    --> 渲染的结果<select multiple='multiple><option>...</option></select>
+							FileInput     --> 渲染的结果<input type='file' ...>
+								ClearableFileInput --> 同FileInput，只不过附加了一个checkbox用于清除选定的File
+
+							xxxxxx(attrs={'属性': '值', ...})    --> 为当前widget渲染结果的标签添加属性
+
+			字段类型可以是：
+				forms.BooleanField(**kwargs)
+				    --> 默认插件：CheckBoxInput；默认的错误信息key：required
+
+				forms.CharField(max_length=数字, min_length=数字, strip=True, empty_value='', **kwargs)
+				    --> max_length/min_length ,即设置当前字段的最少/最多的字符数；
+				    	strip为True，则自动去掉当前字段值的开头和结尾的空格；
+				    	empty_value ,即使用什么值来表示空值，默认使用''来表示空值；
+					--> 默认插件：TextInput；默认的错误信息key：required，max_length，min_length
+
+				forms.ChoiceField(choices=[...], **kwargs)
+					--> choice=[('A1','A2'),('B1','B2'), ...] ,即提供的选项，所有的'_1'都是标签中value属性的值，'_2'都是渲染结果中呈现的值
+					--> 默认插件：Select；默认的错误信息key：required，invalid_choice
+
+				forms.MultipleChoiceField(choices=[...], **kwargs)
+					--> 验证输入的值是否【都在】choice的范围内
+					--> choice=[('A1','A2'),('B1','B2'), ...] ,即提供的选项，所有的'_1'都是标签中value属性的值，'_2'都是渲染结果中呈现的值
+					--> 默认插件：SelectMultiple；默认的错误信息key：required，invalid_choice，invalid_list
+
+				forms.DateField(input_formats=[...], **kwargs)
+					--> input_formats=['%Y-%m-%d', '%m/%d/%Y', ...] ,即为日期类字段的值提供格式化的参考(input_formats的默认值很丰富)
+					--> 默认插件：DateInput；默认的错误信息key：required，invalid
+
+				forms.DateTimeField(input_formats=[...], **kwargs)
+					--> input_formats=['%Y-%m-%d %H:%M:%S', ...] ,即为日期类字段的值提供格式化的参考(input_formats的默认值很丰富)
+					--> 默认插件：DateTimeInput；默认的错误信息key：required，invalid
+
+				form.DecimalField(max_value=Decimal对象, min_value=Decimal对象, max_digits=数字, decimal_places=数字, **kwargs)
+					--> 默认插件：NumberInput(如果**kwargs参数中localize=False)，否则为TextInput；
+					    默认的错误信息key：required, invalid, max_value, min_value, max_digits, max_decimal_places
+
+				forms.TimeField(input_formats=[...], **kwargs)
+					--> input_formats=['%H:%M:%S', ...] ,即为日期类字段的值提供格式化的参考(input_formats的默认值很丰富)
+					--> 默认插件：TextInput；默认的错误信息key：required，invalid
+
+				forms.EmailField(**kwargs)
+					--> 默认插件：EmailInput；默认的错误信息key：required，invalid
+
+				forms.FileField(max_length=数字, allow_empty_file=True, **kwargs)
+					--> max_length ,即上传文件名的最大字符数；
+						allow_empty_file ,即如果为True，则验证时即是为空（即未上传文件）也会被通过
+					--> 默认插件：ClearableFileInput；默认的错误信息key：required，invalid，missing，empty，max_length
+
+				forms.ImageField(**kwargs)
+					--> 需要预先安装Pillow库
+					--> 默认插件：ClearableFileInput；默认的错误信息key：required，invalid，missing，empty，invalid_image
+
+				forms.IntegerField(max_value=数字, min_value=数字, **kwargs)
+					--> max_value/min_value ,即限定输入整数的范围
+					--> 默认插件：NumberInput(如果**kwargs参数中localize=False)，否则为TextInput；
+					    默认的错误信息key：required，invalid，max_value，min_value；
+
+				forms.GenericIPAddressField(protocol='both', unpack_ipv4='disabled', **kwargs)
+				    --> 验证输入的值是否是有效的IP地址
+				    --> protocol ,即指定能够输入的IP格式是v4还是v6，默认二者都可以
+				        unpack_ipv4 ,即是否解包输入IPv4的值，该参数仅当protocol为both时才有效
+				    --> 默认插件：TextInput；默认的错误信息key：required，invalid
+
+				forms.URLField(max_length=数字, min_length=数字, **kwargs)
+					--> 验证输入的值是否是有效的URL
+					--> max_length/min_length ,即输入的ULR最长和最短的字符数
+					--> 默认插件：URLInput；默认的错误信息key：required，invalid
+
+				forms.SlugField(allow_unicode=False, **kwargs)
+				    --> 验证输入的值是否只包含：字符、数字、下划线和连字符
+					--> allow_unicode ,即指定输入的值是否只限于Unicode字符
+					--> 默认插件：TextInput；默认的错误信息key：required，invalid
+
+				forms.RegexField(regex='xx', strip=False, **kwargs)
+					--> 验证输入的值是否匹配正则表达式
+					--> strip ,即在验证是否匹配表达式之前，是否去掉空格
+					--> 默认插件：TextInput；默认的错误信息key：required，invalid
+
+	3.Form类和对象详解
+
+		  options详解：
+		      initial={'字段': '初始值', ...} ,即动态创建字段初始值（即表单声明时传入参数），优先级比静态创建（即字段声明时传入参数）要高
+
+		      auto_id='xx'/True/False ,如果为False，则表单的渲染结果中没有<label>标签，也没有<label>标签的for属性和<input>标签的id属性；
+		                               如果为True，则表单的渲染结果中包括<label>标签，<label>标签的for属性和<input>标签的id属性都为'字段名'；
+		                               如果为'xx'（xx中包含占位符%s -> 对应'字段名'），则表单的渲染结果中包括<label>标签，<label>标签的for属性和<input>标签的id属性都为'xx'；
+		                                        （xx中不包含站位符%s），则表单的渲染结果中包括<label>标签，但<label>标签的for属性和<input>标签的id属性都为'id_%s'；
+
+	          use_required_attribute=True/False ,如果为True，则所有required=True字段的渲染结果中<input>标签带有required属性；否则，不带有required属性；
+
+			  label_suffix=''/'xx' ,即设置<label>标签的后缀（仅当<label>标签不是以标点符号结尾时才有效）
+
+		      field_order=['字段',...] ,即设置表单的渲染结果中<input>标签的先后顺序；
+
+
+		  表单类({待验证的数据}, request.FIlES, options)
+		      --> ctype: 表单实例 ,即创建一个bound(有约束的)表单实例
+
+		  表单类(options)
+		      --> ctype: 表单实例 ,即创建一个unbound(无约束的)表单实例
+
+
+			  表单实例.is_bound
+			      --> ctype: True/False ,即判断表单实例是有约束的，还是无约束的；如果有参数哪怕是空的字典，也被视作有约束；
+
+			  表单实例.clean()
+		      	  --> ctype: None ,即执行表单验证（表单的验证方法）
+
+			  表单实例.is_valid()
+			      --> ctype: True/False ,即执行表单验证，并返回验证结果
+
+			  表单实例.errors
+			      --> ctype: 字典 ,即返回字段验证的错误信息集合，返回的字典形如：
+			          {'字段a': ['错误信息1', '错误信息2', ...], '字段b': ['错误信息1', '错误信息2', ...], ...}
+
+			  表单实例.errors.as_data()
+			  	  --> ctype: 字典 ,即返回字段验证的错误信息集合，只不过返回的是原始格式而不再是字典形式，形如：
+			  	      {'字段a': [ValidationError(['错误信息1'])], '字段b': [ValidationError(['错误信息1'])], ...}
+
+			  表单实例.errors.as_json(escap_html=False)
+			      --> ctype: 字典 ,即返回字段验证的错误信息集合，只不过返回的是json格式而不再是字典形式，形如：
+			          {'字段a': [{'message': '错误信息1', 'code': '错误码1'}, {'message': '错误信息2', 'code': '错误码2'}, ...],
+					   '字段b': [{'message': '错误信息1', 'code': '错误码1'}, {'message': '错误信息2', 'code': '错误码2'}, ...],
+					   ...}
+
+			  表单实例.has_error(field, code=None)
+			  	  --> ctype: True/False ,即判断对应的field是否有code错误信息；默认code=None，表示只要对应的field有错误信息，就会返回True
+			      --> code: None ,即从外部主动向某个字段添加错误信息；
+			          field是字符串类型，表示字段名；error是字符串类型或ValidationError对象，表示错误信息；
+			          如果主动向某个字段添加错误信息，那么在cleaned_data(所有通过验证的数据集合）中会相应地去掉该字段
+
+	          表单实例.add_error(field, error)
+	              --> ctype: None ,即主动向某个字段添加错误信息（建议在重写的 Form子类实例.clean() 方法中使用）；
+	              --> field ,若field=None，则视作为__all__字段添加错误信息（信息将被添加到.non_field_errors()的返回值中）
+
+			  表单实例.non_field_errors()
+			  	  --> ctype: 列表 ,即返回所有无对应字段的错误信息集合（包括.add_error()方法相应去掉的字段和.clean()方法主动抛出的ValidationErrors）
+
+			  表单实例.has_changed()
+			  	  --> ctype: True/False ,即判断表单接收的参数（即待验证的数据）是否与表单初始设置的数据相同；如果不相同，则返回True；否则返回False；
+
+			  表单实例.changed_data
+			      --> ctype: 列表 ,即返回所有与表单初始设置数据不同的表单接收数据（即待验证的数据）
+
+			  表单实例.cleaned_data
+			      --> ctype: 字典 ,即返回所有通过验证的表单数据
+
+			  表单实例.as_table()
+			      --> ctype: 字符串 ,即用tr标签包裹表单内容后返回（print(表单实例)即调用该方法）
+
+			  表单实例.as_p()
+			      --> ctype: 字符串 ,即用p标签包裹表单内容后返回
+
+			  表单实例.as_ul()
+			      --> ctype: 字符串 ,即用li标签包裹表单内容后返回
+
+			  表单实例.is_multipart()
+			      --> ctype: True/False ,即判断表单实例是否是enctype="multipart/form-data"
+
+			  表单实例.fields['字段']
+			      --> ctype: 对象 ,即返回表单中对应的字段对象
+
+			      字段.auto_id
+			          --> ctype: 字符串 ,即返回渲染结果中<input>标签的id属性值，如果实例化表单类时auto_id参数为False，则返回空字符串；
+
+				  字段.data
+				      --> ctype: 字段的值/None
+
+				  字段.errors
+				      --> ctype: 列表 ,即返回字段的错误信息合集
+
+				  字段.field
+				      --> ctype: 对象 ,即回溯字段对应的本身对象
+
+				  字段.form
+				      --> ctype: 对象 ,即回溯字段对应的表单实例
+
+				  字段.help_text
+				      --> 返回字段的help_text
+
+				  字段.name
+				      --> 返回字段的名字
+
+				  字段.label
+				      --> 返回字段的label值（不带标签）
+
+				  字段.clean(value)
+				      --> 验证value是否有效（字段的验证方法）
+
+				  字段.as_widget(widget=None, attrs=None, only_initial=False)
+				      --> 改变当前字段的widget类型，并为它的渲染结果添加HTML属性
+
+				  字段.css_classes('xx')
+				      --> 为当前字段的渲染结果添加额外的class属性（基本的class属性为 required 或 error）
+
+				  字段.label_tag(contents=None, attrs=None, label_suffix=None)
+				      --> 修改当前字段的渲染结果中的<label>标签
+				      --> contents ,即用新标签来替换<label>标签
+				      --> attrs ,即额外添加<label>标签中的HTML属性
+				      --> label_suffix ,即修改<label>标签的后缀（默认为:）
+
+	4.ModelForm详解
+
+		4.1 模型类->模型表单类的字段对应关系
+			  模型类            —->        模型表单类
+			AutoField					N/A
+			BigAutoField				N/A
+			BigIntegerField				IntegerField 	min_value为-9223372036854775808，max_value为9223372036854775807
+			BooleanField				BooleanField
+			CharField					CharField 		max_length为模型类中字段的max_length；如果null=True，则empty_value为None
+			DateField					DateField
+			DateTimeField				DateTimeField
+			DecimalField				DecimalField
+			EmailField					EmailField
+			FileField					FileField
+			FilePathField				FilePathField
+			FloatField					FloatField
+			ForeignKey					ModelChoiceField
+			ImageField					ImageField
+			IntegerField				IntegerField
+			IPAddressField				IPAddressField
+			GenericIPAddressField		GenericIPAddressField
+			ManyToManyField				ModelMultipleChoiceField
+			NullBooleanField			NullBooleanField
+			PositiveIntegerField		IntegerField
+			PositiveSmallIntegerField	IntegerField
+			SlugField					SlugField
+			SmallIntegerField			IntegerField
+			TextField					CharField 		widget=forms.Textarea
+			TimeField					TimeField
+			URLField					URLField
+
+
+		4.2 模型表单类的创建和实例
+			4.2.1 创建
+			class 模型表单类(forms.ModelForm)
+				额外的字段声明
+				...
+				class Meta:
+					model = 映射的模型类名                  		 	# 根据哪个模型类来创建模型表单类
+
+					fields = '__all__'/['xx', 'xx', ...]     		# 如果省略或为'__all__'表示使用上述模型类的所有字段；
+					  										   		  否则使用[...]列表中的所有字段
+					exclude = ['xx', 'xx', ...]             	    # 不使用[...]列表中的所有字段，即使该字段出现在fields的列表中
+
+					localize_fields = '__all__'/['xx', 'xx', ...]  	# [...]列表中的所有字段都会被本地化
+
+					field_classes = {   							# 为模型表单类中的字段自定义字段类型
+						'字段1': 字段类型名,
+						'字段2': 字段类型名,
+						...
+					}
+
+					widgets = {                                     # 为模型表单类中的字段自定义插件类型及渲染后的标签属性值
+						'字段1': 插件类1(attrs={'属性': '值', ...}),
+						'字段2': 插件类2(attrs={'属性': '值', ...}),
+						...
+					}
+
+					labels = {  									# 为模型表单类中的字段自定义label内容
+						'字段1': _('label标签的内容'),                # label内容建议使用国际化函数包裹，即from django.utils.translation import gettext_lazy as _
+						'字段2': _('label标签的内容'),
+						...
+					}
+
+					help_texts = {  								# 为模型表单类中的字段自定义help_text内容
+						'字段1': _('help_text的内容'),                # help_text内容建议使用国际化函数包裹，即from django.utils.translation import gettext_lazy as _
+						'字段2': _('help_text的内容'),
+						...
+					}
+
+					error_messages = {    							# 为模型表单类中的字段自定义error_messages内容
+						'字段1': {'code': _('message'), ...},        # error_messages内容建议使用国际化函数包裹，即from django.utils.translation import gettext_lazy as _
+						'字段2': {'code': _('message'), ...},
+						...
+					}
+
+			4.2.2 实例
+			obj = 模型表单类名(...)
+				...有：
+				instance=模型类实例，即按照某个模型类对象中的数据实例化模型表单类
+				initial={'字段':'值', ...}，即初始化模型表单类实例的数据
+
+			obj.save(commit=True)
+			    即模型表单类实例对象的save()方法：按照模型表单类的数据在数据库中创建并储存一个对象
+			    如果commit=False，则返回创建的数据库对象（可以自定义后续的操作）；
+			    同时为obj对象提供一个save_m2m()方法，用于保存多对多关系对象；
+
+
+模板语言
+------------------------------
+	1.模板语言语法
+
+		· 模板语言中，对象进行方法调用时去掉（）；
+
+		· 模板语言中，字典或序列访问自己内部元素时一律用 . ，而不是 [] ；
+
+	2.变量引用
+		{{ 变量 }}  # 变量也可以是：字典 / 列表 / 其他对象.key值/索引值/对象属性
+
+	3.变量过滤
+		{{ 变量|过滤参数 }} # 通过过滤参数进一步调整变量的输出值
+
+	            --> {{ 变量|add:xx }} # add优先尝试将'变量'和'xx'都转换成整数进行运算；
+	                                  如果失败，则尝试部分数据类型的'+'操作（例如，列表）；
+	                                  如果仍失败，则输出''空字符串；
+
+				--> {{ 变量|addslashes }} # 如果变量中有引号，则在引号前面自动加上'\'
+
+				--> {{ 变量|capfirst }} # 如果变量的第一个字符是字母，则将其大写；
+				                        如果不是字母，则无任何效果；
+
+				--> {{ 变量|title }} # 将变量的每个单词的首字母大写，其他字母小写；
+
+				--> {{ 变量|lower }} # 将'变量'全部转换成小写；
+
+				--> {{ 变量|upper }} # 将'变量'全部转换成大写；
+
+				--> {{ 变量|ljust:'总宽度' }} # 变量输出时左对齐，总宽度为'总宽度'；
+
+				--> {{ 变量|center:'总宽度' }} # 变量在输出时居中对齐，总宽度为'总宽度'；
+
+				--> {{ 变量|rjust:'总宽度'}} # 变量在输出时右对齐，总宽度为'总宽度'；
+
+				--> {{ 变量|random }} # 从'变量'中随机选择一项输出；
+
+				--> {{ 变量|cut:'字符集' }} # 变量在输出时去掉所有的'字符集'中的字符；
+
+				--> {{ 变量|default:xx }} # 变量的真假值为True，则输出'变量'；否则，输出'xx'；
+
+				--> {{ 变量|default_if_none:xx }} # 当且仅当变量为None时，输出'xx'；
+
+				--> {{ 变量|dictsort:'key值'/索引 }} # 如果变量是一个内嵌字典或序列的列表，则输出时按照'key值'（或将对应索引的值当作'key值'）排序；
+
+				--> {{ 变量|dictsortreversed:'key值'/索引 }}
+
+				--> {{ 变量|escape }} # 将'变量'转换成保留字符，例如：< 转换成 &lt;  > 转换成 &gt;
+				--> {{ 变量|safe }}   # 同escape，注意'负负得正'；
+
+				--> {{ 变量|first }} # 输出'变量'的第一项；
+
+				--> {{ 变量|last }} # 输出'变量'的最后一项；
+
+				--> {{ 变量|join:'xx' }} # 如果'变量'是内嵌字符串的列表，将'xx'插入到每个字符串之间，类似于'xx'.join(iterable)；
+
+				--> {{ 变量|make_list }} # 将'变量'拆解为内嵌字符串的列表，例如：'Joel'会被转换成['J','o','e','l']；
+
+				--> {{ 变量|length }} # 输出'变量'的长度；
+
+				--> {{ 变量|slice:'a:b:c'}} # 将'变量'分片后输出；
+
+				--> {{ 变量|linebreaks }} # 将'变量'中的换行符全部替换为<br>标签，将'空行'替换为<p>标签；
+
+				--> {{ 变量|linenumbers }} # 将'变量'中所有的值依次加上'1.' '2.' '3.'...的项目符号；
+
+				--> {{ 变量|truncatechars:数字 }} # 将'变量'缩减至'数字'位后输出（其中原变量占据'数字-3'位，'...'固定占据3位）；
+
+				--> {{ 变量|truncatewords:数字 }} # 将'变量'缩减至'数字'个单词后输出（其中原变量占据'数字'个单词，'...'不包括在内）；
+
+	            --> {{ 变量|urlencode }} # 将'变量'进行百分号编码后输出（通常用于URL的输出）；
+
+				--> {{ 变量|wordcount }} # 输出'变量'的单词个数；
+
+				--> {{ 变量|pluralize:'xx' }} # 如果'变量'的值不是1，则输出'xx'作为变量的后缀，用于表示变量的复数形式；
+
+	4.标签引用
+		{% autoescape on/off %}
+		...
+		{% endautoescape %}
+			--> 开启/关闭【...中内容自动转换成保留字符】的功能
+
+		{% block 区块名 %}
+		...
+		{% endblock %}
+			--> 在父模板中定义被替换的内容/在子模板中定义替换的内容
+
+		{% extends 含路径的父模板名 %}   # 父模板名可以是一个字符串，也可以是Template对象，但需要路径正确
+		    --> 在当前模板中继承父模板
+
+		{% include 含路径的模板名 with xx=xx xx=xx %} # 可以额外向'导入的其他模板'传入关键字参数，用于渲染它
+			--> 在当前模板中导入其他模板
+
+		{% filter 过滤参数1|过滤参数2|... %}
+		...
+		{% endfilter %}
+			--> 将...中的内容引用一个或多个过滤参数
+
+		{% firstof 变量1 变量2 ... 'default' %}
+			--> 输出一个或多个变量中首个True的变量；
+			    如果所有变量都为False，则输出字符串'default'
+
+		{% for 项目 in 容器 %}
+		...可以使用项目
+		{% empty %}
+		...容器为空时输出的内容
+		{% endfor %}
+			--> for循环
+
+		{% if 条件判断 %}
+		...
+		{% elif 条件判断 %}
+		...
+		{% else %}
+		...
+		{% endif %}
+			--> if判断
+			--> 条件判断中可以使用：变量引用或变量过滤，以及它们之间的比较运算符、逻辑运算符、in/not in、is/is not
+
+		{% comment 注释名 %} ... {% endcomment %}
+			--> 添加一段注释，注释标签内无法嵌套其他模板标签
+
+		{% csrf_token %}
+			--> 添加csrftoken
+
+		{% load 模板标签集 [from 标签库] %}
+			--> 例如：{% load cache %}
+			         {% load static %}
+
+		{% now '时间格式' %}
+			--> 按照格式输出当前时间:
+			    年：Y -> '1999'      y -> '99'
+			    月：M -> 'Jan'       m -> '01'-'12'
+			    日：D -> 'Fri'       d -> '01'-'31'
+			    时：H -> '00'-'23'   h -> '01'-'12'
+			    时：G -> '0'-'23'    g -> '1'-'12'
+			    分：i -> '00'-'59'
+			    秒：s -> '00'-'59'
+
+				标：A -> 'AM'/'PM'   a -> 'a.m.'/'p.m.'
+				标：f -> '1:30'      整点省去':xx'部分
+				标：P -> '1:30 p.m.' 整点省去':xx'部分
+				标：r -> 'Thu, 21 Dec 2000 16:01:07 +0200'
+
+		{% cycle 变量1 变量2 ... as 别名 %}
+			--> 当前标签的输出值依次是'变量1'，'变量2'，...结束后会再次循环；
+			--> 你可以为cycle标签起别名，在引用'别名'这个变量时输出值会停留在起别名的那一次；
+			    如果想输出后续的循环值，需要借助'别名'新创建一个cycle标签，例如： {% cycle 别名 %}
+
+		{% resetcycle %}
+			--> 重启cycle标签，无论当前循环到哪个变量都会复位到初始状态；
+
+		{% spaceless %}
+		...
+		{% endspaceless %}
+			--> 移除...中的所有空白字符（包括制表符和换行符）；
+
+		{% url name 参数1 参数2 .../关键字参数1 关键字参数2 ...%}
+			--> 生成一个不带域名的URL；
+			--> name是指urlpatterns中的path()或re_path()中的name值；
+			--> 参数/关键字参数 ,是根据匹配模式来的，注意：不要混用，应该全部都是参数或全部都是关键字参数；
+
+		{% with 变量 %}
+		...使用变量
+		{% endwith %}
+			--> 缓存'变量'，通常得到该变量会执行非常复杂的函数，例如：数据库查询；
+
+		{% verbatim %}
+		...
+		{% endverbatim %}
+			--> ...中的内容不会被模板引擎渲染，通常用在允许js模板与Django的语法冲突时；
+
+
+认证系统
+------------------------------
+	· Django的认证系统涵盖认证和授权两部分，内容涉及'用户'、'用户组'、'权限管理'、'密码哈希系统'、'表单和视图工具'和'热插拔的后端系统'，
+	  组件包括'django.contrib.auth'、'django.contrib.contenttypes'、'SessionMiddleware'和'AuthenticationMiddleware'；
+
+	· User(模型类对象,'django.contrib.auth.models.User')是Django认证系统的核心，它的主要属性有：
+	 
+		User对象.username
+			--> 即用户的用户名，必备属性，不超过150个字符，只能包含字母、'_'、'@'、'+'、'-'和'.'；
+
+		User对象.password
+			--> 即用户的密码，必备属性，可以包含任意字符；
+
+		User对象.email
+			--> 即用户的邮箱；
+
+		User对象.first_name
+			--> 即用户的名字，可选属性，不超过30个字符；
+
+		User对象.last_name
+			--> 即用户的姓氏，可选属性，不超过150个字符；
+
+		User对象.date_joined
+			--> 即datetime对象，表示当前User对象创建的时间；
+
+		User对象.last_login
+			--> 即datetime对象，表示当前User对象最后一次登录的时间；
+
+		User对象.is_superuser
+			--> 即True/False，表示当前User对象是否是超级用户；
+
+		User对象.is_staff
+			--> 即True/False，表示当前User对象是否有权限进入admin后台；
+
+		User对象.is_active
+			--> 即True/False，表示当前User对象是否被激活；
+
+		User对象.is_authenticated
+			--> 即总是为True，表示当前User对象被认证过(若是AnonymousUser对象，则总是为False)；
+
+		User对象.groups
+			--> 即多对多关系字段，连接Group对象；
+
+		User对象.user_permissions
+			--> 即多对多关系字段，连接Permission对象；
+
+	  主要方法有：
+	  	User对象.get_username()
+	  		--> ctype: 字符串，即当前User对象的用户名(不推荐直接访问.username属性)；
+
+	  	User对象.get_full_name()
+	  		--> ctype: 字符串，即当前User对象的'first_name' + '空格' + 'last_name'；
+
+	  	User对象.set_password(raw_password)
+	  		--> ctype: None，即为当前User对象设置密码，该操作不会保存User模型类对象；
+	  		--> raw_password ，即表示密码的字符串，若为None，则当前User对象为无密码账户(等价于调用.set_unusable_password()方法):
+
+	  	User对象.set_unusable_password()
+	  		--> ctype: None，即将当前User对象设为无密码账户(与密码为空字符串不同)；
+
+	  	User对象.has_usable_password()
+	  		--> ctype: True/False，即检测当前User对象是否是有密码账户；
+
+	  	User对象.check_password(raw_password)
+	  		--> ctype: True/False，即检测当前User对象的密码是否正确(实际上是比较原始密码的hash值)；
+
+		User对象.get_all_permission(obj=None)
+			--> ctype: 字符串集合，即返回当前User模型类拥有的'用户权限'和'用户组权限'；
+			--> obj ，即User对象，若传入该参数，则返回指定User对象拥有的'用户权限'和'用户组权限'；
+
+		User对象.get_group_permission(obj=None)
+			--> ctype: 字符串集合，即返回当前User模型类拥有的'用户组权限'；
+			--> obj ，即User对象，若传入该参数，则返回指定User对象拥有的'用户组权限'；
+
+		User对象.has_perm(perm, obj=None)
+			--> ctype: True/False，即检测当前User模型类是否拥有perm权限，若当前User对象未被激活，则总是返回False；
+			--> perm ，即字符串，形如：'App名.权限名'，例如：'foo_app.add_BarModel'、'foo_app.delete_BarModel'；
+			--> obj ，即User对象，若传入该参数，则检测指定User对象是否拥有perm权限；
+
+		User对象.has_perms(perm_list, obj=None)
+			--> ctype: True/False，即检测当前User模型类是否拥有所有的perm权限，若当前User对象未被激活，则总是返回False；
+			--> perm_list ，即字符串列表，形如：['App名.权限名', ...]；
+			--> obj ，即User对象，若传入该参数，则检测指定User对象是否拥有所有的perm权限；
+
+		User对象.email_user(subject, message, from_email=None, **kwargs)
+			--> ctype: None，即向当前User模型类发送邮件；
+			--> from_email ，若为None，则使用settings.py中DEFAULT_FROM_EMAIL的值；
+			--> **kwargs ，所有此类参数都将传入底层的.send_mail()方法中；
+
+	· 创建用户信息
+		# 在终端
+		python3 manage.py createsuperuser [--username=xxx --email=xxx@xxx]
+			--> 键入上述操作后会被要求额外键入密码(若未指定'--...'内容，也会被一并要求额外键入)；
+
+		# 在程序
+		from django.contrib.auth import models
+
+		models.User.objects.create_user(username, email=None, password=None, **extra_fields)
+			--> ctype: User对象，创建基本的User对象后，还可以设置可选属性来完善它，例如：User对象.first_name = 'xxx'；
+		
+		models.User.objects.create_superuser(username, email, password, **extra_fields)
+			--> ctype: User对象；
+
+	· 修改用户密码(在程序)
+		from django.contrib.auth import models
+
+		user对象 = models.User.objects.get(username='xxx')
+		user对象.set_password('新密码')
+		user对象.save() # 手动保存
+
+	· 验证用户(在程序)
+		--------------------
+		# 用户检测
+		from django.contrib.auth import authenticate
+
+		authenticate(username='用户名', password='密码')
+			--> ctype: User对象/None，即根据部分信息检测对应的User对象是否存在；
+
+		--------------------
+		# 用户认证和注销
+		from django.contrib.auth import login, logout
+
+		login(request对象, User对象)
+			--> ctype: None，该方法将指定的User对象通过session机制保存在request对象中；
+
+		logout(request对象)
+			--> ctype: None，该方法将清除request对象中的session信息(自然也会清除其中的User对象)；
+
+		--------------------
+		# 用户过滤
+		1. request对象.user.is_authenticated
+			  --> ctype: True/False，'request对象.user'会返回当前request请求对应的用户信息(不是'User对象'，就是'AnonymousUser对象')；
+			  	  	     无论如何，它们都具有is_authenticated属性：User对象，该属性值总为True；AnonymousUser对象，该属性值总为False，
+			  	  	     因此，上述操作可以用于初步的过滤操作；
+
+		2. from django.contrib.auth.decorators import login_required
+
+		   @login_required[(redirect_field_name='next', login_url=None)]
+		   def 视图函数(request):
+			   ...
+			   ...
+		   // 装饰器login_required工作流程：
+			  a. 若当前request请求对应的User对象被认证过(即login)，则正常执行视图函数的业务逻辑；
+			  b. 若对应的User对象未被认证，则重定向至login_url参数的网址(期间会附带查询字符串，内容为? + redirect_field_name参数 + = + 原URL中的查询字符串)；
+			  c. 若未指定login_url参数，则默认使用settings.py中LOGIN_URL的值；
+
+		3. from django.contrib.auth.decorators import user_passes_test
+
+		   def 过滤函数(user):
+		       ...
+		       return True/False
+		   ...
+		   @user_passes_test(过滤函数[, login_url=None,redirect_field_name='next'])
+		   def 视图函数(request):
+		       ...
+		       ...
+		   // 装饰器user_passes_test工作流程：
+		      a. 该装饰器接收一个过滤函数(该函数接收User对象作为参数)，若过滤函数返回True，则正常执行视图函数的业务逻辑；
+		      b. 若过滤函数返回False，则重定向至login_url参数的网址；
+		      c. 若未指定login_url参数，则默认使用settings.py中LOGIN_URL的值；
+
+		4. from django.contrib.auth.decorators import permission_required
+
+		   @permission_required(perm[, login_url=None, raise_exception=False])
+		   def 视图函数(request):
+		       ...
+		       ...
+		   // 装饰器permission_required工作流程：
+			  a. 该装饰器接收perm参数(单个权限字符串或内嵌多个权限字符串的可迭代对象)，
+			     若当前request请求对应的User对象满足单个或所有的权限，则正常执行视图函数的业务逻辑；
+			  b. 若不满足，则重定向至login_url参数的网址；
+		      c. 若未指定login_url参数，则默认使用settings.py中LOGIN_URL的值；
+		      d. 若raise_exception=True，则不执行重定向操作，而是直接抛出403错误；
+
+	· 授权用户(在程序)
+		# Django中基本的权限有：'add'权限、'delete'权限和'change'权限；
+		# User对象中有groups和user_permissions两个关系字段(即属性)可以便捷地操作权限；
+
+		User对象.groups.set([group_list]) / .add(group1, group2, ...) / .remove(group1, group2, ...) / .clear()
+		User对象.user_permissions.set([permission_list]) / .add(permission1, permission2, ...) / .remove(group1, group2, ...) / .clear()
+
+	· 自定义权限(在程序)
+		# 自定义权限，是指操作用户创建的那些模型类的权限，该功能其他可以添加在那些模型类的内部类Meta中，也可以直接定义：
+		from ... import App中的模型类
+		from django.contrib.auth import models as au_models
+		from django.contrib.contenttypes import models as ct_models
+
+		temp = ct_models.ContentType.objects.get_for_model(App中的模型类)
+		自定义 = au_models.Permission.objects.create(
+			codename='权限名',
+			name='权限介绍',
+			content_type=temp,
+		)
+		# '自定义'可以被绑定到User对象的关系字段groups和user_permissions了
+
+	· 密码管理
+		# Django的密码管理默认使用底层为SHA256的PBKDF2算法(PBKDF2算法，即对加盐的hash值多次重复计算)；
+		  因此，User对象.password属性的值形如：'<算法>$<迭代次数>$<盐值>$<原始密码哈希值>'
+
+		# Django的密码管理支持自定义加密算法(默认的算法系统由PASSWORD_HASHERS的值决定)；
+		  PASSWORD_HASHERS = [
+			  'django.contrib.auth.hashers.PBKDF2PasswordHasher', 			-> 用于储存密码
+			  'django.contrib.auth.hashers.PBKDF2SHA1PasswordHasher',		-> 用于验证密码
+			  'django.contrib.auth.hashers.Argon2PasswordHasher', 			-> 用于验证密码
+			  'django.contrib.auth.hashers.BCryptSHA256PasswordHasher',  	-> 用于验证密码
+			  'django.contrib.auth.hashers.BCryptPasswordHasher', 			-> 用于验证密码
+		  ]
+		  因此，自定义加密算法只需要修改PASSWORD_HASHERS列表中的第一个元素即可；
+
+
+网站地图
+------------------------------
+	# 网站地图(SiteMaps)，是一个XML文件，用于告诉搜索引擎自己网站各个页面之间的关系和更新频率；
+
+	# 配置SiteMaps
+	  1. 确保INSTALLED_APPS中添加了'django.contrib.sitemaps'；
+	  2. 确保TEMPLATES中某个后端的APP_DIRS配置项为True(默认已实现)；
+	  3. 确保配置好了sites framework；
+
+    # 在urlpatterns中添加额外的path对象(旨在告诉Django当客户端访问'/sitemap.xml'地址时搭建一个网站地图)
+
+	  from django.contrib.sitemaps import views as sm_views
+
+	  urlpattern = [
+	      ...,
+	      // 视图函数sitemap额外接收一个必要参数{'sitemaps': ...}，其中...是一个映射Sitemap类或其实例对象的字典，且'key'是Sitemap类的部分字符；
+	         'template'是你自定义的模板，用于渲染Sitemap文件；
+	      // 'sitemap.xml'这个网站地图文件的名字不重要，重要的是它所在的目录(Django会将它所在的目录作为根目录向下搭建网站地图)；
+	      path('sitemap.xml', sm_views.sitemap, {'sitemaps': {'key': Sitemap类名/Sitemap类的实例对象}, 'template_name': 'xxx.html'}, name='django.contrib.sitemaps.views.sitemap'},
+	      ...
+	  ]
+
+    # 创建网站地图首页，用于统计所有独立的网站地图文件(独立的网站地图文件中包含50000个url地址时建议这么做)
+
+  	  from django.contrib.sitemaps import views as sm_views
+
+  	  urlpattern = [
+	      ...,
+	      path('sitemap.xml', sm_views.index, {'sitemaps': {'key': Sitemap类名/Sitemap类的实例对象}}, 'template_name': 'xxx.html'),
+	      path('sitemap-<section>.xml', sm_views.sitemap,  {'sitemaps': {'key': Sitemap类名/Sitemap类的实例对象}, 'template_name': 'xxx.html'}, name='django.contrib.sitemaps.views.sitemap'),
+	      ...
+	  ]
+
+    # 创建Sitemap类(Sitemap类被创建的位置不重要，但必须是'django.contrib.sitempas.Sitemap'的子类)
+
+	  from django.contrib.sitemaps import Sitemap
+
+	  class XxxSitemap(Sitemap):
+		  location = 字符串  			-> 可选类属性，值表示.items()返回值的路径(不含协议和域名)，值可以通过常量、函数或其他方式生成；
+		  lastmod = datetime对象 	-> 可选类属性，值表示.items()返回值的最后修改日期&时间，值可以通过常量、函数或其他方式生成；
+		  changefreq = 字符串 		-> 可选类属性，值表示.items()返回值的更新频率，范围为：'always'、'hourly'、'daily'、'weekly'、'monthly'、'yearly'和'never'；
+		  priority = 浮点数  			-> 可选类属性，值表示.items()返回值的权重(默认为0.5)，值可以通过常量、函数或其他方式生成；
+
+		  def items(self): 			-> 必要实例方法，返回值为一个内嵌对象的列表(对象的类型无关紧要)；
+			  return obj_list
+
+		  def location(self, obj):
+			  return 字符串
+
+		  def lastmod(self, obj):
+			  return datetime对象
+
+		  def changefreq(self, obj):
+			  return 'xx'
+
+		  def priority(self, obj):
+			  return 浮点数
+
+
+信号
+------------------------------
+	· Django中预留了许多钩子，用于'在某些情况发生之前或之后，执行指定的操作'，这些钩子就被称作'信号'；
+
+	1 信号创建
+
+		# 内置信号
+			from django.db.models.signals import xxx
+				pre_init              --> 模型类实例化调用__init__方法之前
+				post_init             --> 模型类实例化调用__init__方法之后
+
+				pre_save              --> 模型类实例对象调用save()方法之前
+				post_save             --> 模型类实例对象调用save()方法之后
+
+				pre_delete            --> 模型类实例对象调用delete()方法之前
+				post_delete           --> 模型类实例对象调用delete()方法之后
+
+				m2m_changed           --> 模型类实例对象中的ManyToManyField字段发生改变时
+
+	            class_prepared        --> 模型类被定义，且被注册到模型系统时
+
+	        from django.core.signals import xxx
+	        	request_started       --> Django开始处理HTTP请求时（流程上在中间件之前）
+	        	request_finished      --> Django完成HTTP响应发送时
+
+	        	got_request_exception --> Django遇到HTTP请求处理过程中抛出的任何异常时
+
+			from django.db.backends.signals import xxx
+				connection_created    --> Django初次连接数据库时
+
+	        from django.test.signals import xxx
+	            setting_changed       --> 单元测试相关
+
+	            template_rendered     --> 单元测试相关
+
+		# 自定义信号
+			from django.dispatch import Signal
+
+			信号 = Signal(providing_args=['xx', 'xx', ...])
+				--> providing_args ,即设置'信号触发'时需要的参数；
+				                    传入 信号.send(sender, **kwargs)中的**kwargs参数必须与providing_args列表中的参数对应；
+
+	2 信号绑定
+
+		# 通过方法绑定
+			from xx import 信号
+
+		    信号.connect(receiver, sender=None, weak=True, dispatch_uid=None)
+		    	--> ctype: None，即将'信号'与'receiver'回调函数绑定，当'信号'send时去执行'receiver'函数；
+		    	--> receiver ,即回调函数，必须形如：def xxx(sender, **kwargs): pass
+		    	--> sender ,即'receiver'回调函数回应的信号源；
+		    	--> weak ,即默认将'receiver'函数做'弱引用'(即weak references)处理，如果'receiver'是一个本地函数，默认可能会被垃圾收集；
+		    	          为避免被垃圾收集，将weak=False；
+		    	--> dispatch_uid ,即为防止信号重复发送，为其制定唯一的标识(通常是字符串，本质上可以是任何hashable对象)；
+		    	                  如果当前的dispatch_uid绑定了一个'receiver'，则其他'receiver'无法绑定到该'dispatch_uid'上；
+
+		# 通过装饰器绑定
+			from django.dispatch import receiver
+			from xx import 信号1
+			from xx import 信号2
+			...
+
+			@receiver([信号1, 信号2, ...], **kwargs)   # **kwargs参数全部会传入<<< 信号.connect(xxx, **kwargs) >>>的**kwargs中
+			def xxx(sender, **kwargs):                # xxx即'receiver'回调函数
+				pass
+
+	    # 取消绑定
+	        信号.disconnect(receiver=None, sender=None, dispatch_uid=None)
+	            --> ctype: True/False ,即如果成功取消，返回True，否则为False；
+
+	3 信号触发
+
+	    # 内置信号会在特定情形下自动send
+
+	    # 自定义信号需要手动send
+	    	from xx import 信号
+
+	    	信号.send(sender, **kwargs)
+	    	    --> ctype: [('receiver'函数, 'receiver'函数返回值), ...]，一个信号可以绑定多个'receiver'回调函数；
+	    	    --> 当'receiver'函数抛出异常时，该方法不捕获异常，只是向上抛，因此会不再调用信号绑定的后续'receiver'函数；
+
+	    	信号.send_robust(sender, **kwargs)
+				--> ctype: [('receiver'函数, 'receiver'函数返回值), ...]，一个信号可以绑定多个'receiver'回调函数；
+				--> 当'receiver'函数抛出异常时，该方法捕获异常并在返回值中用'异常实例'替换'receiver'函数的位置，因此会调用信号绑定的所有'receiver'函数；
+				--> '异常实例'的__traceback__属性，记录了tracebacks信息；
+
+
+SETTINGS.PY
+------------------------------
+	1.静态文件
+		· Django中的静态文件是由内置的【django.contrib.staticfiles】APP处理；
+		· 静态文件涉及的settings有：
+			STATIC_ROOT         -> 静态文件的收集目录，系统及路径字符串，该目录不用于存放静态文件；
+				                   在部署时，py3 manage.py collectstatic命令会将所有的静态文件收集至该目录下；
+
+			STATIC_URL          -> 用于标识静态文件的字符串(必须设置，否则报错)；
+							       当请求URL是以STATIC_URL的值开头时，则该次请求被标识为请求静态文件；
+					               该字符串也可用于模板语言中生成请求静态文件URL的开头部分，用法：
+					                   1.向settings.py文件TEMPLATES变量'OPTIONS'对应的'context_processors'中添加值，例如：
+						                   TEMPLATES = [
+											   {
+											       ...
+											       'OPTIONS': {
+											           'context_processors': [
+											               ...
+											               'django.template.context_processors.static',  # 关键的一步
+											           ],
+											       },
+											   },
+										   ]
+									   2.在模板语言中使用{{ STATIC_URL }}来生成静态文件URL的开头部分，例如：
+									   	   <img src="{{ STATIC_URL }}myimg.jpg"> 默认情况下相当于 src="http://127.0.0.1:8080/static/myimg.jpg"
+
+			STATICFILES_DIRS    -> 静态文件的主要存放目录，可以包含多个系统级路径字符串(即指定多个存放静态文件的目录)；
+			                       搜索优先级高于所有APP的static子文件夹；
+
+			STATICFILES_FINDERS -> 用于定义静态文件的搜索目录，默认为：
+			                       [
+								    'django.contrib.staticfiles.finders.FileSystemFinder',     -> 优先搜索STATICFILES_DIRS中的所有目录
+								    'django.contrib.staticfiles.finders.AppDirectoriesFinder', -> 然后搜索每个APP中名为'static'的文件夹
+								   ]
+
+	2.上传文件
+		· Django中的上传文件是由MEDIA_ROOT指定的文件夹保存的；
+		· 上传文件涉及的settings有：
+			MEDIA_ROOT          -> 上传文件的存放目录，系统级路径字符串，必须与STATIC_ROOT的值不同；
+
+			MEDIA_URL           -> 该字符串也可用于模板语言中生成请求上传文件URL的开头部分，用法：
+					                   1.向settings.py文件TEMPLATES变量'OPTIONS'对应的'context_processors'中添加值，例如：
+						                   TEMPLATES = [
+											   {
+											       ...
+											       'OPTIONS': {
+											           'context_processors': [
+											               ...
+											               'django.template.context_processors.media',  # 关键的一步
+											           ],
+											       },
+											   },
+										   ]
+									   2.在模板语言中使用{{ MEDIA_URL }}来生成静态文件URL的开头部分，例如：
+									   	   <img src="{{ MEDIA_URL }}myimg.jpg">
+									   3.由于静态文件有默认的APP处理，而上传文件没有，所有还需要手动在urlpatterns中配置对应的path()或re_path()实例，用法：
+									       from django.views.static import serve
+									       # from 项目名.settings import MEDIA_ROOT -> 必要时，可以借助MEDIA_ROOT构建请求上传文件所在的目录
+
+									       urlpatterns = [
+									           path('MEDIA_URL的值/...', serve, kwargs={'document_root': 请求上传文件所在的目录})
+									       ]
+									       # 说明：假设MEDIA_URL='media'，则模板语言中请求的URL应为：http://127.0.0.1:8080/media/myfile；
+									              那么上述的urlpatterns中就会匹配到，从而交给内置的serve函数处理，
+									              为此需要传入额外的参数'document_root'，用于告诉serve函数去哪个目录下搜索；
+
+
+Logging系统
+------------------------------
+    · Django的LOGGING系统使用Python的logging模块，其组件分为：Loggers、Handlers、Filters和Formatters，下文中logging消息指LogRecord对象；
+
+    · Loggers，即记录器，LOGGING系统的显式入口，是消息的源头；每条logging消息的产生都会夹杂自己的log等级：
+        DEBUG    - 显示调试信息的低阶log
+        INFO     - 显示正常信息的log
+        WARNING  - 显示已发生的小问题的log
+        ERROR    - 显示已发生的大问题的log
+        CRITICAL - 显示已发生的严重问题的log
+      记录器收到消息后会判定该消息的log等级是否大于或等于自己设定的log等级；若是，则记录器会向下传递(下一站，过滤器，如果有的话)；
+      记录器可以按点号进行层级命名，例如，'x.xx.xxx'，这意味着'x'是'x.xx'的父记录器，'x.xx'是'x.xx.xxx'的父记录器；
+      这种层级命名涉及到消息的捕获，当Loggers的配置中propagate=True时，意味着'x'对应的Handlers可以接收到'x.xx'和'x.xx.xxx'传递过来的消息；
+
+    · Filters，即过滤器，对进入LOGGING系统的消息进一步的筛选过滤，以便控制它们在系统内的传递；
+      过滤器可以安排在Loggers和Handlers；如果有多个过滤器，则可以链式地执行筛选过滤；
+
+    · Handlers，即处理器，对Loggers(或Filters，如果有的话）传递过来的消息执行对应的操作：打印至屏幕、保存至文件或传递至网络套接字等等；
+      处理器收到消息后也会判定该消息的log等级是否大于或等于自己设定的log等级；若是，则处理器才会执行对应的操作；
+
+    · Formatters，即格式器，对进入LOGGING系统的消息最后输出时进行格式化，类似于字符串的格式化(采用占位符的形式)；
+        %(asctime)s      消息产生的时间，实际输出如：'2003-07-08 16:49:45.896'
+        %(created)f      消息产生的时间，实际输出如：'1533433514.268708'
+        %(levelname)s    消息对应的等级，实际输出如：'DEBUG'/'INFO'/'WARNING'/'ERROR'/'CRITICAL'
+        %(levelno)s      消息对应的等级，实际输出如：10/20/30/40/50
+        %(message)s      消息的主体内容
+        %(name)s         产生消息的Loggers名
+        %(funcName)s     产生消息的函数名
+        %(pathname)s     产生消息的系统级文件路径名(含后缀名)，实际输出如：'/xx/xx/xx.xx'
+        %(filename)s     产生消息的文件名(含后缀名)
+        %(module)s       产生消息的模块名(即不含后缀的filename)
+        %(process)d      产生消息的进程ID
+        %(processName)s  产生消息的进程名
+        %(thread)d       产生消息的线程ID
+        %(threadName)s   产生消息的线程名
+
+    · 消息，即LogRecord对象，除上述Formatters中占位符的key值属性外，还具有属性：
+        .exc_info   --> (type,value,traceback)/None，即异常信息
+        .msg        --> 格式化后的文本内容/arbitrary对象
+        .stack_info --> 堆栈信息
+
+    · Logging的使用
+        import logging                          // 导入logging模块
+
+        logger = logging.getLogger(name=None)   // 创建Loggers(即记录器实例)，name为记录器别名或__name__(即动态绑定为当前记录器所在的模块名)
+        logger.debug(...)/info(...)/warning(...)/error(...)/critical(...)   // 产生消息
+        logger.log(level, msg, *args, **kwargs) // 在根Loggers层级产生对应等级的消息
+        logger.exception(msg, *args, **kwargs)  // 在根Loggers层级产生'ERROR'等级的消息
+
+    · Logging的配置
+        LOGGING_CONFIG
+            --> 指向一个可调用对象的路径字符串/None，该可调用对象接收配置中LOGGING的值来开启Django的Logging功能；若为None，则禁用Django默认的LOGGING系统(用户可以自行设定)；
+            --> 默认：'logging.config.dictConfig'
+
+        DEBUG
+            --> 若为True(默认)，则内置的'django'记录器(即层级别名为'django'但除去'django.server'的记录器)会接收'INFO'及以上的消息，并传递给控制台；
+                若为False，则内置的'django'记录器(即层级别名为'django'但除去'django.server'的记录器)会接收'ERROR'及以上的消息，并传递给内置的AdminEmailHandler；
+                * 层级别名为'django.server'的记录器会接收'INFO'及以上的消息，并传递给控制台；
+            --> 默认：True
+
+        LOGGING
+            --> Django的Logging配置；
+            --> LOGGING = {
+                    'version': 1,                           // 必须，表示Logging配置采用版本1的dictConfig形式(目前能且仅能为1)
+                    'disable_existing_loggers': True,       // 默认为True，表示禁用(不是删除)Django中所有默认的Logging配置，建议改为False
+                    'formatters': {
+                        '格式器别名': {                       // 设置Formatters格式器别名
+                            'format': '...'                 // 固定key值 + '%(...)占位符 ...'
+                        },
+                        ...
+                    }
+                    'filters': {
+                        '过滤器别名': {                       // 设置Filters过滤器别名
+                            '()': '分层级的过滤器名',          // ()表示过滤器为可调用对象
+                            'key': value,                   // 传入过滤器中的关键字参数，形如：key=value
+                            ...
+                        },
+                        ...
+                    }
+                    'handlers': {
+                        '处理器别名': {                        // 设置Handlers处理器别名
+                            'class': '...',                  // 设置处理器按什么类的规定执行操作
+                            'level': '...',                  // 设置处理器的log等级
+                            'filters': ['过滤器别名', ...],    // 设置安排在处理器上的一个(或多个)过滤器
+                            'formatter': ['格式器别名', ...]   // 设置处理器执行操作时按什么格式器最终输出
+                        },
+                        ...
+                    }
+                    'loggers': {
+                        '记录器别名': {                        // 设置Loggers记录器分层级别名
+                            'propagate': True/False,         // 设置记录器是否开启层级捕获
+                            'level': '...',                  // 设置记录器的log等级
+                            'filters': ['过滤器别名', ...],    // 设置安排在记录器上的一个(或多个)过滤器
+                            'handlers': ['处理器别名', ...],   // 设置记录器对应的一个(或多个)处理器
+                        },
+                        ...
+                    }
+                }
+
+    · 内置的Logging组件
+        # 内置的Filters过滤器
+            'filters': {
+                '过滤器别名': {
+                    '()': 'django.utils.log.CallbackFilter',
+                    'callback': 自定义的函数
+                }
+            }
+            # CallbackFilter过滤器接收一个参数callback，每条消息(即LogRecord对象)通过该过滤器时都会调用参数callback对应的函数，并返回True/False；
+              用户想过滤掉某些LogRecord对象，则让它们对应的条件分支return False；想通过向下传递，则让它们return True；
+
+'''
+'''
+Django + uWSGI + Nginx部署
+------------------------------
+1.概念解析
+	Django，即一种Web框架，它采用MVT设计模式，注重组件的复用性和可插拔性；
+
+	WSGI，即Python Web Server Gateway Interface(Web服务器网关接口)的缩写，是Python语言定义的Web服务器和Web应用程序或框架之间的一种简单通用的接口，它的设计基于现存的CGI标准。
+	
+	WSGI协议，即WSGI的概念延伸，是Web服务器和Web应用程序或框架之间的通信协议规范；
+
+	uWSGI，即一种Web服务器，它实现了WSGI协议、HTTP协议、FastCGI协议和uwsgi协议等多种协议，生产环境中它往往作为中间件，架设在Nginx和Web应用程序或框架之间，这样既能够弥补下游WSGI接口的性能缺陷，又能配合Nginx实现更强性能组合；
+
+	uwsgi协议，即uWSGI独有的通信协议，用于定义传输数据的类型，Python语言定义的WSGI接口可以将数据在uwsgi协议和WSGI协议之间进行转换；
+
+	Nginx，即一种Web服务器，它也实现了uWSGI中的多种协议，同时具有高稳定性、高并发性、反向代理和负载均衡等优点，生产环境中往往作为理想的web服务器使用；
+
+	常见的请求处理过程如下：
+			   http协议	       uwsgi协议	    uwsgi协议          WSGI协议
+		浏览器 --------> Nginx --------> uWSGI --------> WSGI接口 --------> Web应用程序或框架
+
+2.部署准备
+	准备虚拟环境
+		a) 安装virtualenv
+			yum install epel-release 	-> 安装epel扩展源(安装pip的前提)
+			yum install python-pip		-> 安装pip 
+			yum clean all 				-> 清楚缓存
+			pip install virtualenv		-> 安装virtualenv库
+		b) 安装wget
+			yum install wget
+		c) 安装python3
+			wget https://www.python.org/ftp/python/<版本号>/Python-<版本号>.tgz		-> 下载python3指定版本的压缩tar包
+			
+	准备Django程序
+		...
+	
+	准备uWSGI
+		a) 安装uWSGI
+			pip install uwsgi 
+
+	安装Nginx
+		xxx install nginx
+3.部署配置
+	配置uWSGI
+		a) 命令行式
+			uwsgi [...]
+				--> [--]
+		b) 脚本文件式
+
+'''
+
+
+
+

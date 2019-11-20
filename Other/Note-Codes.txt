@@ -1,0 +1,430 @@
+'''
+base64编码
+=============================================
+	1.出现原因
+		网络中数据是按照01序列（ASCII码）存储的，而ASCII标准码中的字符只有0~127（十进制数），
+		为了保证数据在繁杂的网络中传输不被错误处理，应该将数据用普适性的、最通用的字符表示。
+		为此，base64编码给出的解决方案是：
+		a)先创建base64自己的编码表，包括
+			A-Z（十进制0~25）
+			a-z（十进制26~51）
+			0-9（十进制52~61）
+			+  （十进制62）
+			-  （十进制63）共64个字符
+		补充：最后的 + 和 - 字符可以更换成其他字符，因此出现了不同版本的base64编码
+
+		b)然后将原来01序列【8位1个字节】的对应关系改为【6位1个字节】
+			这样划分后的01序列只有【2**6=64】个值，正好对应base64编码表的64个字符
+
+	2.设计特点
+		a) 源数据的【3个字节】变成了base64编码中的【4个字节】，8位和6位的最小公倍数为24
+
+		b) 如果源数据不是【3个字节】的整数倍，则将源数据用0补齐，对应至base64编码中就是用A补齐，这样新的问题出现了：
+		如何将补齐的A与实际的A区别开来，因此base64编码规定将=作为补齐符（即结束符，000000对应=，而不再对应A）
+		反过来，将base64编码后的数据转换成源数据，如果base64编码的数据不是【4个字节】的整数倍，也会先用=补齐，再将=用A替换
+
+		c) base64编码在通用性高的同时，平衡了转换后数据量增幅小的问题，适合将01序列（即二进制文件）转换成字符
+
+	3.判断是否是base64编码的依据
+		a) 密文中存在'=','+'或'-'字符，
+		b) 密文字节数是4的整数倍，
+
+	4.Python标准库的使用
+		import base64
+
+		base64.b64encode(s,altchars=None)
+			--> ctype: bytes对象，即返回base64编码后的数据
+			--> s ,即要被base64编码的类bytes对象
+			--> altchars ,即2个字节的类bytes对象，用于替换标准base64编码表中的 + 和 -
+
+		base64.b64decode(s,altchars=None,validate=False)
+			--> ctype: bytes对象，即返回base64解码后的数据
+			--> s ,即要被base64解码的bytes对象或ASCII字符串对象
+			--> altchars ,即2个字节的类bytes对象，用于替换标准base64编码表中的 + 和 -
+'''
+
+
+'''
+AES算法
+=============================================
+1.简要介绍
+	AES算法，也叫Rijndael加密法或高级加密标准（Advanced Encryption Standard），是一种区块（分组）加密
+
+2.区块（分组）加密的常见模式
+	·ECB模式（Electronic Codebook Book，电码本模式）
+
+		将明文分成若干个相同长度的明文块，对这些明文块用密钥分别加密
+
+		优点:
+			1.简单；
+			2.有利于并行计算；
+			3.误差不会被传送；
+		缺点:
+			1.不能隐藏明文的模式；
+			2.可能对明文进行主动攻击；
+
+	·CBC模式（Cipher Block Chaining，密文块链接模式）
+
+		将明文分成若干个相同长度的明文块，从第0块开始，依次将每个明文块与上一个密文块（或人为添加的初始IV块）进行异或运算，
+		然后将异或结果用密钥加密，并作为下个明文块的'上一个密文块’
+
+		优点：
+			1.不容易主动攻击,安全性好于ECB,适合传输长度长的报文,是SSL、IPSec的标准。
+		缺点：
+			1.不利于并行计算；
+			2.误差传递；
+			3.需要初始化向量IV
+
+	·CFB模式（Cipher FeedBack，密文反馈模式）
+
+		优点：
+			1.隐藏了明文模式;
+			2.分组密码转化为流模式;
+			3.可以及时加密传送小于分组的数据;
+		缺点:
+			1.不利于并行计算;
+			2.误差传送：一个明文单元损坏影响多个单元;
+			3.唯一的IV;
+
+	·OFB模式（Output FeedBack，输出反馈模式）
+
+		优点:
+			1.隐藏了明文模式;
+			2.分组密码转化为流模式;
+			3.可以及时加密传送小于分组的数据;
+		缺点:
+			1.不利于并行计算;
+			2.对明文的主动攻击是可能的;
+			3.误差传送：一个明文单元损坏影响多个单元;
+
+	·CTR模式（Counter，计数器模式）
+
+		将明文分成若干个相同长度的明文块，然后引入一个自增算子，
+		从第0块开始，将当前算子的值用密钥加密后与当前算子对应的明文块异或，从而得到密文块
+
+3.Python第三方库的使用
+	from Crypto.Cipher import AES
+
+	AES.MODE_ECB
+		--> ctype: 1 ,即类常量 - 表示ECB模式
+
+	AES.MODE_CBC
+		--> ctype: 2 ,即类常量 - 表示CBC模式
+
+	AES.MODE_CFB
+		--> ctype: 3 ,即类常量 - 表示CFB模式
+
+	AES.MODE_OFB
+		--> ctype: 5 ,即类常量 - 表示OFB模式
+
+	AES.MODE_CTR
+		--> ctype: 6 ,即类常量 - 表示CTR模式
+
+	AES.MODE_OPENPGP
+		--> ctype: 7 ,即类常量 - 表示OPENPGP模式
+
+	AES.block_size
+		--> ctype: 16 ,即类变量，表示分组的每个明文块长度为16个字节
+
+	AES.key_size
+		--> ctype: (16,24,32) ,即类变量，表示AES的密钥可以是16或24或32个字节
+
+	AES.new(key,*args,**kwargs)
+		--> ctype: AESCipher对象 ,即AES算法对象
+
+		--> key ,即AES算法的密钥，它必须是16或24或32个字节的bytes对象
+
+		--> mode ,即某个类常量 - 默认是ECB模式
+
+		--> IV  ,即初始矢量IV，它仅适用于非ECB和CTR模式，
+				 除OPENPGP模式外，它必须是block_size字节长度的bytes对象（默认是全为0的bytes对象）
+
+		--> counter ,即算子函数，它仅适用于CTR模式，
+					 该函数必须返回下一个block_size字节长度的bytes对象，用作自增算子的下一个值
+
+		--> segment_size ,即xx，它仅适用于CFB模式，
+						  先欠着
+
+		--> .encrypt(plaintext)
+				--> ctype: bytes对象，即返回加密后的数据（与plaintext的字节长度一致，特例：OPENPGP模式下，IV加密后的数据会放在最前面）
+						   注意：该方法会记录状态，不应该使用同一个AESCipher对象多次加密数据，因为：
+						   c.encrypt(a) + c.encrypt(b) === c.encrypt(a+b)
+						   注意：不同模式下plaintext的字节长度要求：
+						   		ECB、CBC和OFB模式下，字节长度必须是block_size的整数倍
+						   		CFB模式下，字节长度必须是（segment_size/8）的整数倍
+						   		CTR模式下，字节长度可以是任意值
+						   		OPENPGP模式下，字节长度必须是block_size的整数倍，但最后一个明文块可以是任意值
+				--> plaintext ,即bytes对象，要被加密的明文块，其字节数必须是16的倍数；
+
+		--> .decrypt(ciphertext)
+				--> ctype: bytes对象，即返回解密后的数据（与ciphertext的字节长度一致）
+ 						   注意：该方法会记录状态，不应该使用同一个AESCipher对象多次解密数据，因为：
+						   c.decrypt(a) + c.decrypt(b) === c.decrypt(a+b)
+						   注意：不同模式下ciphertext的字节长度要求：
+						   		ECB、CBC和OFB模式下，字节长度必须是block_size的整数倍
+						   		CFB模式下，字节长度必须是（segment_size/8）的整数倍
+						   		CTR模式下，字节长度可以是任意值
+						   		OPENPGP模式下，字节长度必须是block_size的整数倍，但最后一个明文块可以是任意值
+				--> ciphertext ,即bytes对象，要被解密的明文块
+
+'''
+
+
+'''
+RSA算法
+=============================================
+
+1.实现原理
+	RSA算法是非对称性密码，加密和解密使用不同的密钥，一般用于加密和签名：
+	加密，一般用PK公钥加密，SK私钥解密；
+	签名，一般用SK私钥签名，PK公钥验证；
+
+2.基础公式
+	加密公式：密文 = 明文**E mod N  --> （E,N）即是PK公钥  }
+													 } --> （E,D,N）即是密钥对
+	解密公式：明文 = 密文**D mod N  --> （D,N）即是SK私钥  }
+
+3.公式过程(φ读'斐')
+	a) 计算n 	--> n = p*q 					   			--> p和q为互质的正整数
+	b) 计算φ(n) --> φ(n) = (p-1)*(q-1)   			   		--> φ(n)是n的欧拉函数，即φ(n) = 小于n且与n互质的正整数的个数
+	c) 计算e 	--> 1 < 整数e < φ(N)，且e和φ(N)互质  	  
+	d) 计算d 	--> 1 < 整数d < φ(N)，且d*e = 1(mod φ(n)) 	 --> d是e对于模数φ(n)的模反元素，即(d*e) % φ(n) = 1
+
+4.加/解密和签名/解签的过程
+	加密过程：
+	a) A提取消息m的消息摘要h(m),并使用自己的私钥对摘要h(m)进行加密,生成签名s
+	b) A将签名s和消息m一起,使用B的公钥进行加密,生成密文c,发送给B
+
+	解密过程：
+	a) B接收到密文c,使用自己的私钥解密c得到明文m和数字签名s
+	b) B使用A的公钥解密数字签名s解密得到H(m)
+	c) B使用相同的方法提取消息m的消息摘要h(m)
+	d) B比较两个消息摘要。相同则验证成功;不同则验证失败
+
+5.Python第三方库的使用
+	from Crypto.PublicKey import RSA
+
+	RSA.generate(bits, randfunc=None, progress_func=None, e=65537)
+		--> ctype: _RSAobj对象，一般做为SK私钥对象
+		--> bits ,即密钥二进制表示时的长度，它必须是256的倍数且不小于1024，同时该值也是RSA模块大小（即n）
+		--> randfunc ,即一个生成随机数的函数，该函数仅接受一个整数N参数，并返回N个字节的随机字符串
+					  如果未指定randfunc参数，则默认使用Crypto.Random里面的函数来实现
+		--> progress_func ,即交互处理函数，该函数接受包含私钥对象的一小段字符串为参数，一般用于提示用户私钥正在生成之类的交互
+		--> e ,即PK公钥指数，它必须是一个正奇整数，用二进制表示时值为1的位数尽可能的少，像默认的65537 --> 10000000000000001
+
+	RSA.construct(tup)
+		--> ctype: _RSAobj对象，通过自定义参数（最少2个，最多6个）生成一个SK私钥
+		--> tup ,即参数按顺序依次包括：
+				 RSA模块大小（n）
+			    	公钥指数（e）
+					私钥指数（d）仅在生成SK私钥时需要
+					第一因数（p）可选
+					第二因数（q）可选
+					共同系数（u）可选 u = (1/p) mod q
+
+	RSA.importKey(externKey, passphrase=None)
+		--> ctype: _RSAobj对象，导入格式化后的字符串并返回对应的密钥对象
+		--> externKey ,即格式化后的字符串：
+					   如果是PK公钥，该字符串的格式可以是：
+					       x.509
+					       OpenSSH
+					   如果是SK私钥，该字符串的格式可以是：
+					       PKCS#1
+					       PKCS#8
+											   	     构   成   S     K   私    钥
+		_RSAobj.keydata        					     |	  |	   |    |    |    |
+			--> ctype: 列表，即_RSAobj类的一个属性，值为['n', 'e', 'd', 'p', 'q', 'u']
+													 |	  |
+													构成PK公钥
+
+		_RSAobj.publickey()
+			--> ctype: _RSAobj对象，即PK公钥对象
+
+		_RSAobj.exportKey(format='PEM', passphrase=None, pkcs=1)
+			--> ctype: bytes对象，即将密钥（PK或SK）对象按照format参数的格式编码后输出为bytes对象
+			--> format ,即 'DER'     --> 按照二进制格式编码，总是非加密的
+						   'PEM'     --> 按照文本格式编码，默认是非加密的
+						   'OpenSSH' --> 按照文本格式编码，但仅适用于PK公钥
+			--> passphrase ,即如果format='PEM'，则passphrase参数的字符串可以用于进一步的加密处理
+			--> pkcs ,即遵循的PKCS标准是什么，
+					  如果pkcs=1, 则PK公钥将被植入一个 X.509 SubjectPublicKeyInfo DER SEQUENCE 中；
+					             而SK私钥将被植入一个 PKCS#1 RSAPrivateKey DER SEQUENCE 中；
+					  如果pkcs=8, 则SK私钥将被植入一个 PKCS#8 PrivateKeyInfo DER SEQUENCE 中；
+					  			 对PK公钥不适用
+
+		为了安全起见，_RSAobj对象（即密钥对象）的加密和解密工作都建议由以下的方法来实现：
+
+			from Crypto.Cipher import PKCS1_OAEP as PO
+
+			PO.new(key, hashAlgo=None, mgfunc=None, label='')
+				--> ctype: cipher对象，用于操作具体的加/解密数据
+				--> key ,即被用于加/解密数据的密钥，如果是SK密钥，则cipher对象只能用于解密
+				--> hashAlgo ,即默认为SHA对象
+
+				--> .encrypt(message)
+						--> ctype: 字符串，即加密后的数据
+								   被加密的数据的字节长度应该 <=（RSA模块位长/8 - 2 * hashAlgo长度 - 2）
+
+				--> .decrypt(ct)
+						--> ctype: 字符串，即解密后的数据
+
+		为了安全起见，_RSAobj对象（即密钥对象）的签名和解签工作都建议由以下的方法来实现：
+
+			from Crypto.Signature import PKCS1_PSS as PP
+
+			PP.new(key, mgfunc=None, saltLen=None)
+				--> ctype: PSS_SigScheme对象，用于签名和解签数据
+				--> key ,即用于签名/解签的密钥（_RSAobj对象），它的长度应该足够长（至少达到mhash的基本要求）
+				--> asltLen ,即加盐的字节长度
+
+				--> .sign(mhash)
+						--> ctype: PSS signature后的字符串对象
+						--> mhash ,即包裹了需要签名的数据的hash对象
+
+				--> .verify(mhash,S)
+						--> ctype: True/False
+						--> mhash ,即包裹了需要签名的数据的hash对象
+						--> S ,即需要被认证的字符串对象
+
+
+6.使用OpenSSL和终端自定义数字证书
+	# 基本概念
+		>>> 数字证书通常分为”X509格式“、”PKCS#12格式“和”PKCS#7格式“，它们的基本信息如下：
+			    X509格式，是最常用的证书格式，这种格式的证书中仅包含公钥信息和基本信息，证书的后缀名通常为.cer或.crt；
+			    PKCS#12格式，是一种封装打包的二进制格式，这种格式的证书中可以包含一个或多个证书，以及公钥和私钥信息(私钥会被加密)，后缀名通常为.p12或.pfx；
+				PKCS#7格式证书，证书中可以包含一个或多个(X509或PKCS#6格式的)证书，以及公钥信息和CRL(免去逐一发送证书的繁琐)，后缀名通常为.p7b；
+					CRL，是证书吊销列表，其中包含了无效的证书列表，以便告诉用户哪些证书已经失效；
+
+		>>> 证书编码通常分为”PEM编码格式“和”DER编码格式“，它们的基本信息如下：
+			    PEM编码格式，文本编码格式（也是OpenSSL的默认编码格式），可读性较高，内容结构大致分为：
+			    	- 类型声明（即起始行和结尾行的“——-BEGIN XXXX ——”和“——END XXXX——”）
+			    	- 文件头（即加密算法、初始IV等有关数据处理的说明内容）
+			    	- 文件体（即私钥、公钥和证书等主体内容，是DER格式的数据经Base64编码再用Ascii报头封装后的结果）
+			    DER编码格式，二进制编码格式，基本不可读；
+
+		>>> 相关文件后缀说明：
+				.key/.pem/.der   -> 通常表示公钥或私钥文件，文件本身可以是PEM编码或DER编码，因此也可以使用.pem或.der后缀名；
+				.csr             -> 通常表示证书请求文件，文件格式为PKCS#10；
+				.crl             -> 通常表示证书吊销文件；
+				.cer/.der        -> 多指DER编码的证书文件；
+				.crt/.pem        -> 多指PEM编码的证书文件；
+				.p12/.pfx        -> 多指PKCS#12格式的证书文件；
+				.p7b             -> 多指PKCS#7格式的证书文件；
+
+	# 创建证书
+		>>> 生成证书私钥
+		    openssl genrsa [options]  : genrsa命令用于创建一个私钥；
+		    	-out filename         : 指定私钥文件的输出路径；
+				numbits               : 指定私钥的位数(至少512位），默认是2048；
+				...                   : 其他options使用默认的即可(详见https://www.openssl.org/docs/manmaster/man1/openssl-genrsa.html)；
+
+		>>> 创建证书请求
+		    openssl req [options]     : req命令用于创建和处理PKCS#10格式的证书请求文件，此外它可以自签名，用于创建CA证书文件；
+				-new                  : 表示创建一个证书请求文件，需要输入相关信息；
+				-key filename         : 从指定路径下读取私钥文件；
+				-out filename         : 指定证书请求文件的输出路径；
+				-outform DER|PEM      : 指定证书请求文件的编码格式；
+				...                   : 其他options使用默认的即可(详见https://www.openssl.org/docs/manmaster/man1/openssl-req.html)
+
+				如果想一步到位生成自签名证书（例如，CA证书），需额外指定参数：
+				-x509                 : 表示创建自签名证书，而不是证书请求文件；
+				-days int             : 设置自签名证书的有效期，默认为30(即30天)；
+
+		>>> 签名其他证书
+			openssl x509 [options]    : x509命令具有多种与证书相关的功能，例如：展示证书信息，将证书转成不同格式和签名证书请求文件等：
+			    -req                  : 表示使用证书请求文件来代替证书文件接受CA证书的签名；
+				-in filename          : 从指定路径下读取证书文件(若提供-req参数，则读取证书请求文件，必须是PEM编码)；
+				-out filename         : 指定签名后证书文件的输出路径；
+				-outform DER|PEM      : 指定签名后证书文件的编码格式；
+				-days int             : 设置当前证书的有效期，默认为30(即30天)；
+				-CA filename          : 使用指定路径下的CA证书签名当前的证书；
+				-CAkey filename       : 使用指定路径下的CA证书私钥签名当前的证书，若未指定该参数，则默认CA证书私钥存在于-CA filename参数的文件中；
+				-CAcreateserial       : 自动创建CA证书的序列号文件；
+				...                   : 其他options使用默认的即可(详见https://www.openssl.org/docs/manmaster/man1/openssl-x509.html)
+
+		>>> 证书格式转换
+			openssl pkcs12 [options]  : pkcs12命令默认用于解析PKCS#12格式的证书，若提供-export参数则用于创建；
+				-export               : 表示当前命令是创建PKCS#12格式的文件，而不是解析；
+				-clcerts              : 表示仅输出客户端证书文件(不包括CA证书)；
+				-in filename          : 从指定路径下读取要被转换的证书文件(必须是PEM编码)；
+				-inkey filename       : 从指定路径下读取私钥文件(必须是PEM编码)；
+				-out filename         : 指定PKCS#12格式的证书文件的输出路径；
+				...                   : 其他options使用默认的即可(详见https://www.openssl.org/docs/manmaster/man1/openssl-pkcs12.html)
+
+'''
+
+
+'''
+Hash算法 - 常见的有：MD5、SHA和RIPEMD，均来自MD4的格式
+=============================================
+
+1.简要介绍
+
+	MD4：具有3轮16步，输出位长度为128位（bits)，在.hexdigest()输出后共有'32位'（即32个字符）
+
+	MD5：具有4轮16步，输出位长128位（bits)，在.hexdigest()输出后共有'32位'（即32个字符）
+
+	SHA-1：具有4个20阶的步长，输出位长160位（bits)，在.hexdigest()输出后共有'40位'（即40个字符）
+
+	SHA-256：具有64轮单步，输出位长256位（bits)，在.hexdigest()输出后共有'64位'（即64个字符）
+
+	SHA-384：实际上与SHA-512相同，输出位长被截断为383位
+
+	SHA-512：具有80个单步的轮数，输出位长512位（bits)，在.hexdigest()输出后共有'128位'（即128个字符）
+
+	RIPEMD-160：具有5轮16步，输出位长160位（bits)，在.hexdigest()输出后共有'40位'（即40个字符）
+
+	HMAC：输出位长160位（bits)，在.hexdigest()输出后共有'40位'（即40个字符）
+
+2.Python第三方库的使用
+
+	from Crypto.Hash import MD4, MD5, RIPEMD, SHA, SHA224, SHA256, SHA384, SHA512
+
+	xx.digest_size
+		--> ctype: 数字，即xx类变量，对应xx算法生成的hash对象的字节长度
+
+	xx.new()
+		--> ctype: xx对象
+
+		--> .update(data)
+				--> ctype: None ,即将data数据添加进xx对象中（按照xx算法），
+						    	 该方法可以调用多次添加不同的数据，也可以将多个数据拼接在一起调用一次
+				--> data ,即必须是bytes对象
+
+		--> .digest()
+				--> ctype: bytes对象,即按照xx算法得到的摘要内容，
+									该摘要内容（即字节内容）的长度为digest_size，
+									该摘要内容（即字节内容）中可以包含非ASCII字符，甚至是空字节
+
+		--> .hexdigest()
+				--> ctype: str对象,即按照xx算法得到的摘要内容，
+								  该摘要内容（即字符串内容）的长度为2倍digest_size，
+								  该摘要内容（即字符串内容）中只能包含十六进制的ASCII数字
+
+
+	from Crypto.Hash import HMAC
+
+	hmac = HMAC.new(msg=None, digestmod=None)
+		--> ctype: HMAC对象
+
+		--> msg ,即bytes对象，用于HMAC对象加密的密钥，
+				 它必须足够长，但该字节长度超过digestmod指定的hash算法的digest_size就没有收益了
+
+		--> digestmod ,即hash模块或者hash对象，默认是Crypto.Hash.MD5的实例对象
+
+		--> .update(data)
+				--> ctype: None ,即将data数据添加进xx对象中（按照xx算法），
+						    	 该方法可以调用多次添加不同的数据，也可以将多个数据拼接在一起调用一次
+				--> data ,即必须是bytes对象
+
+		--> .digest()
+				--> ctype: bytes对象,即按照xx算法得到的摘要内容，
+									该摘要内容（即字节内容）的长度为digest_size，
+									该摘要内容（即字节内容）中可以包含非ASCII字符，甚至是空字节
+
+		--> .hexdigest()
+				--> ctype: str对象,即按照xx算法得到的摘要内容，
+								  该摘要内容（即字符串内容）的长度为2倍digest_size，
+								  该摘要内容（即字符串内容）中只能包含十六进制的ASCII数字
+
+'''

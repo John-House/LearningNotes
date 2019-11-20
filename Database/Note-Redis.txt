@@ -1,0 +1,697 @@
+'''
+Redis
+=============================================
+
+redis.conf文件配置
+--------------------------------
+	# include /path/to/local.conf
+	# include /path/to/other.conf
+	...
+		--> 为不同的Redis配置不同的配置文件；
+		    最好将该设置放在配置文件的最后一行；
+		--> 默认：禁用该功能
+
+	bind 127.0.0.1 ::1
+		--> 设置Redis默认绑定的IP地址；
+			禁用或不设置时，Redis将接受来自任意IP的连接；
+		--> 默认：127.0.0.1 -> IPv4 等价于 ::1 -> IPv6
+
+	port 6379
+		--> 设置Redis默认绑定的端口号；
+		--> 默认：6379
+
+	save 900 1
+	save 300 10
+	save 60 10000
+		--> 设置Redis在多少秒内执行了多少次写操作后，将进行一次持久化储存；
+		--> 默认：如果在900秒（15分钟）内，执行了至少 1次 key值修改（即写操作），则持久化储存一次；
+		         如果在300秒（5分钟）内，执行了至少 10次 key值修改（即写操作），则持久化储存一次；
+		         如果在60秒（1分钟）内，执行了至少 10,000次 key值修改（即写操作），则持久化储存一次；
+
+	stop-writes-on-bgsave-error yes
+		--> 设置Redis在RDB持久化时出现错误后，是否继续工作；
+		--> 默认：yes（即停止工作）
+
+	rdbcompression yes
+		--> 设置Redis在RDB持久化时是否允许文件压缩；
+		--> 默认：yes（即允许使用压缩）
+
+	rdbchecksum yes
+		--> 设置Redis在RDB持久化时是否进行校验，为此会损耗一定的性能；
+		--> 默认：yes
+
+	rdbfilename dump.rdb
+		--> 设置Redis在RDB持久化时的文件名；
+		--> 默认：dump.rdb
+
+	dir /usr/local/var/db/redis/
+		--> 设置Redis数据库写操作关联的目录（例如，RDB持久化）;
+		--> 默认：/usr/local/var/db/redis/
+
+	# requirepass foobared
+		--> 设置Redis客户端连接的密码授权；
+		    由于Redis强悍的性能，该密码应该足够强壮；
+		--> 默认：禁用该功能
+
+	# maxclients 10000
+		--> 设置Redis接收客户端连接的最大并发量；
+		--> 默认：禁用该功能
+
+	tcp-backlog 511
+		--> 设置Redis接收TCP请求连接的最大并发量；
+		    如果是Linux系统，内核接收TCP请求的最大并发量实际受到/proc/sys/net/core/目录下somaxconn值的影响，
+		    所以除了设置当前的Redis，还需要去修改somaxconn值
+		--> 默认：511
+
+	timeout 0
+		--> 设置当客户端闲置多少秒后，Redis关闭此次连接；
+			0表示禁用该功能（即不会关闭连接）
+		--> 默认：0
+
+	tcp-keepalive 300
+		--> 设置Redis每隔多少秒后向客户端发送一次ACK确认；
+		    该功能用于检测是否出现死等现象，以及网络连接是否长连接
+		--> 默认：300
+
+	loglevel notice
+		--> 设置Redis日志的级别；严重性从轻到重依次为：
+		    debug < verbose < notice < warning
+		--> 默认：notice
+
+	logfile ""
+		--> 设置Redis日志的保存目录；
+		--> 默认：""
+
+	databases 16
+		--> 设置Redis默认开启的数据库个数；
+		    默认使用的数据库ID为DB 0，切换至其他的数据库使用命令SELECT <dbid> （ID从 0 至 变量-1）
+		--> 默认：16
+
+	protected-mode yes
+		--> 设置Redis是否开启【保护模式】；
+		    如果允许其他IP的客户端连接当前的Redis，则应该取消【保护模式】
+		--> 默认：yes
+
+	daemonize no
+		--> 设置Redis是否作为【守护进程】运行；
+		    当Redis作为【守护进程】运行时，Redis会在【指定目录】下生成redis.pid
+		--> 默认：no
+
+	pidfile /var/run/redis.pid
+		--> 设置生成redis.pid的指定目录；
+		--> 默认：/var/run/redis.pid
+
+redis-cli命令行接口
+--------------------------------
+	redis-cli是终端上有关Redis的命令行接口，可以发送指令到Redis数据库，也可以从Redis数据库读取数据；
+
+	· 命令行模式(即未连接Redis服务器，多位于终端界面)
+		redis-cli
+			--> 连接本地的Redis服务器，并开启交互模式；
+
+		redis-cli -h IP地址 -p 端口号 [-a 密码]
+			--> 连接指定IP和端口号的Redis服务器，并开启交互模式；
+			    如果连接的Redis服务器设有密码，可以加上 -a 密码 参数；
+
+		redis-cli [-h ... -p ... -a ...] -r [次数] [-i 秒数] 命令
+			--> 向本地的Redis服务器循环发送命令'次数'，每次之间延时'秒数'；
+				如果设置了[连接参数]，则发送至指定IP和端口的Redis服务器；
+			    如果'次数'为-1，表示永续循环；
+
+	    redis-cli --eval Lua脚本
+	    	--> 执行指定的Lua脚本（不再局限于交互模式下执行）；
+
+	    redis-cli [-h ... -p ... -a ...] --stat [-i 秒数]
+	    	--> 开启实时统计模式，该模式下会实时监控本地的Redis服务器，并每秒打印一次服务器的基本信息；
+	    	    如果设置了[连接参数]，则实时监控指定IP和端口的Redis服务器；
+	    	    如果想设置打印的间隔时间，可以添加参数 -i 秒数 ；
+
+	    redis-cli [-h ... -p ... -a ...] monitor
+	    	--> 开启命令统计模式，自动监听本地的Redis服务器，并打印接收的每条指令；
+	    	    如果设置了[连接参数]，则自动监听指定IP和端口的Redis服务器；
+
+	    redis-cli [-h ... -p ... -a ...] --rdb 文件路径
+	    	--> 持久化本地的Redis服务器至指定的文件；
+	    	    如果设置了[连接参数]，则持久化指定IP和端口的Redis服务器；
+
+	   	redis-cli [-h ... -p ... -a ...] --slave
+	   		--> 打印本地的(主)Redis服务器向其从服务器发送的流数据；
+	   		    如果设置了[连接参数]，则打印指定IP和端口的(主)Redis服务器向其从服务器发送的流数据；
+
+		cat 文件路径 | redis-cli [-h ... -p ... -a ...] --pipe
+			--> 文件准备：创建.txt文件 -> 写入所有的命令 -> 转码.txt文件(即 unix2dos 文件路径，没有unix2dos则需要安装)
+
+			--> 启用管道协议在本地的Redis服务器上批量执行'文件路径'中的所有命令；
+			    如果设置了[连接参数]，则在指定IP和端口的Redis服务器上批量执行；
+
+	· 交互模式（即连接了Redis服务器）
+		可以执行任何相关的命令
+			--> 详见<Redis的数据类型及相关命令>
+
+		clear
+			--> 清除屏幕
+
+Redis的数据类型及相关命令
+--------------------------------
+	· Redis是key-value储存的NoSQL数据库，它的value值的类型可以是：
+	  Strings(字符串)、Lists(链表)、Sets(集合)、Sorted Sets(有序集合)、Hashes(哈希映射)、Bit Arrays(位数组)和HyperLogLogs(概率基数)
+
+	· Strings的相关命令
+		SET key value [EX 超时秒数] [PX 超时毫秒数] [NX|XX]
+			--> 将key值修改为value字符串；该命令可以重新设置key值的超时时间；
+			    NX - 仅当key不存在时才进行修改；XX - 仅当key存在时才进行修改；
+
+		MSET key1 value1 [key2 value2 ...]
+			--> 设置一个[或多个]key的值
+			--> ctype: OK
+
+		MSETNX key1 value1 [key2 value2 ...]
+			--> 设置一个[或多个]key的值；若任何一个key存在，则不执行任何操作；
+			--> ctype: 1/0（若为0，说明至少有一个key不存在）
+
+		GET key
+			--> 返回key值；若key不存在，则返回nil；若key值不是字符串，则返回错误；
+
+		MGET key1 [key2 key3 ...]
+			--> 返回一个[或多个]key值；若key不存在或不是字符串形式，则返回nil；
+
+		GETRANGE key start end
+			--> 返回key值从start至end索引处（左闭右闭）的子串；若索引越界，自动限制为最小或最大索引值；
+
+		GETSET key value
+			--> 将key映射至value，并返回原来的值；若key存在但原来的值不是字符串形式，则返回错误；
+
+		INCR key
+			--> 将key值（字符串形式的数字）原子自增1；
+			    若key不存在，将其设置为"0"；若key值不是字符串形式或无法转换成整数，则返回错误；
+
+		INCRBY key 数值
+			--> 将key值（字符串形式的数字）原子自增'数值'(数字形式)；
+			    若key不存在，将其设置为"0"；若key值不是字符串形式或无法转换成整数，则返回错误；
+
+		DECR key
+			--> 将key值（字符串形式的数字）原子自减1；
+			    若key不存在，将其设置为"0"；若key值不是字符串形式或无法转换成整数，则返回错误；
+
+		DECRBY key 数值
+			--> 将key值（字符串形式的数字）原子自减'数值'(数字形式)；
+			    若key不存在，将其设置为"0"；若key值不是字符串形式或无法转换成整数，则返回错误；
+
+		STRLEN key
+			--> 返回key值的长度；若key不存在，则返回0；
+
+		APPEND key value
+			--> 向key值末尾添加value字符串；若key不存在，则创建一个空字符串再添加；
+			--> ctype: 添加后的key值长度（即字符串长度）
+
+		BITCOUNT key [start end]
+			--> 统计key值的第start个至第end个比特位之间，共有多少个值为1的比特位；若key不存在，则返回0；
+
+		SETBIT key offset value
+			--> 将key值的第offset个比特位的值设为value（该值只能是0或1）；
+			    0 <= offset < 232；
+			    若key值不存在，则创建一个足够长的字符串，以保证至少能够设置offset个比特位；
+			    若key值增大，则用0填充新增的比特位；
+			--> ctype: 1/0（返回设置之前第offset个比特位的值）
+
+		GETBIT key offset
+			--> 返回key值的第offset个比特位的值（该值只能是0或1）；
+			    若key值不存在，则返回0；
+			    若offset超出了key值的总比特位，则返回0；
+			--> ctype: 1/0
+
+		SETRANGE key 索引 value
+			--> 用value复写key值中'索引'至末尾的子串；
+
+	· Lists的相关命令
+		BLPOP key1 [key2 key3 ...] timeout
+			--> 阻塞式从左截取一个元素(即从key1至...中第一个非空列表的第一个元素)，
+			    如果所有的key都不存在或为空列表，则该命令产生阻塞(若设置了timeout，则该秒数后解除阻塞，为0则表示不阻塞)
+
+		BRPOP key1 [key2 key3 ...] timeout
+			--> 同上，只不过是从右截取一个元素
+
+		LPOP key
+			--> 从左截取key值中的一个元素
+
+		RPOP key
+			--> 同上，只不过是从右截取一个元素
+
+		LPUSH key value1 [value2 value3 ...]
+			--> 从左向key值中按顺序添加一个[或多个]元素；若key不存在，会创建一个空列表再添加元素
+			--> ctype: 添加后的key值长度
+
+		LPUSHX key value
+			--> 当key存在时，从左向key值中添加一个元素；若key不存在，不执行任何操作
+
+		RPUSH key value1 [value2 value3 ...]
+			--> 同上，只不过是从右添加元素
+
+		RPUSHX key value
+			--> 同上上，只不过是从右添加元素
+
+		LINSERT key BEFORE|AFTER 基准值 value
+			--> 将value添加至key值中基准值的前面[或后面]；若key不存在，不执行任何操作
+			--> ctype: 添加后的key值长度（若基准值不存在，命令返回-1）
+
+		LSET key index value
+			--> 将key值指定索引处的元素修改为value；若索引越界，则返回错误
+
+		LREM key count value
+			--> 删除key值中前count个值为value的元素；若count为正数，则从前往后算count个，若count为负数，则从后往前算count个，若count为0，则移除所有值为value的元素
+
+		LRANGE key start stop
+			--> 从key值中返回索引从start至stop的所有元素（左闭右闭，接受负值索引，同Python索引规则）
+
+		LINDEX key index
+			--> 返回key值中指定索引处的元素；若索引越界，则返回nil
+
+		LLEN key
+			--> 返回key值的长度；若key不存在，则返回0（视作空列表）
+
+		RPOPLPUSH 源key 目的key
+			--> 从源key值的末尾截取最后一个元素，并将其添加至目的key的头部；若源key不存在，不执行任何操作（但会返回nil）
+
+		BRPOPLPUSH 源key 目的key timeout
+			--> 同上，只不过当源key值为空列表时，发生阻塞（若设置了timeout，则该秒数后解除阻塞，注意：若为0，则永久阻塞）
+
+	· Sets的相关命令
+		SADD key value1 [value2 value3 ...]
+			--> 向key值中添加一个[或多个]元素；若元素已经存在于key值中，则忽略它；若key不存在，会创建一个空集合再添加元素
+
+		SCARD key
+			--> 返回key值中的元素个数；若key不存在，则返回0
+
+		SMEMBERS key
+			--> 返回key值中的所有元素
+
+		SMOVE 源key 目的key value
+			--> 将源key值中的value元素迁移至目的key值中；若源key值不存在或不存在value元素，不执行任何操作并返回0；
+			--> ctype: 1/0（如果源key成功迁移(即移除)value元素，则返回1）
+
+		SINTER key1 [key2 key3 ...]
+			--> 返回key1与其他key的交集（按顺序取交集）
+
+		SINTERSTORE 结果key key1 [key2 key3 ...]
+			--> 返回key1与其他key的交集（按顺序取交集），并将结果映射到结果key
+
+		SDIFF key1 [key2 key3 ...]
+			--> 返回key1与其他key的差集（按顺序取差集）
+
+		SDIFFSTORE 结果key key1 [key2 key3 ...]
+			--> 返回key1与其他key的差集（按顺序取差集），并将结果映射到结果key
+
+		SUNION key1 [key2 key3 ...]
+			--> 返回key1与其他key的并集（按顺序取并集）
+
+		SUNIONSTORE 结果key key1 [key2 key3 ...]
+			--> 返回key1与其他key的并集（按顺序取并集），并将结果映射到结果key
+
+		SISMEMBER key value
+			--> 判断指定的value元素是否位于key值内（即是否是key集合内的元素）
+			--> ctype: 1/0（若是，则返回1；若不是或key不存在，则返回0）
+
+		SREM key value1 [value2 value3 ...]
+			--> 从key值中删除一个[或多个]指定的value元素；若指定value不存在，则忽略它；若key不存在，则返回0
+			--> ctype: 被成功删除的元素个数/0
+
+		SPOP key [count]
+			--> 从key值中截取一个[或count个]随机元素并返回它
+
+		SRANDMEMBER key [count]
+			--> 从key值中返回一个[或count个不重复的]随机元素并返回它（key值中不会移除随机返回的元素）
+
+	· Sorted Sets的相关命令
+		ZADD key [NX|XX] [CH] [INCR] score1 value1 [score2 value2 ...]
+			--> 为一个[或多个]元素配置对应的权重后，将它们添加至指定key值中；
+				若value元素已存在于key值中，则将其权重调整为score；
+				若key不存在，则创建一个Sorted Sets后再添加；
+			--> score 是字符串形式的双精浮点数，包括+inf和-inf等常量；
+			--> NX - 只添加key值中不存在的value；XX - 只更新key值中已存在的value；
+			    CH - 声明该参数后，命令的返回值变为修改过的元素个数(本来会返回新添加的元素个数)，区别在于已存在的元素，如果权重被调整也被视作修改过
+			    INCR - 声明该参数后，命令中的score表示'增值'，而不是'设置值'；
+
+		ZINCREBY key 增值 value
+			--> 将key值中value元素的权重自增'增值'；
+			    若key值中不存在value，则添加权重为0.0的value元素再自增'增值'；
+			    若key不存在，则创建一个包含value元素的Sorted Sets；
+
+		ZREM key value1 [value2 value3 ...]
+			--> 删除key值中一个[或多个]元素；
+
+		ZCARD key
+			--> 返回key值中的元素个数；若key不存在，则返回0；
+
+		ZCOUNT key min max
+			--> 返回key值中 min <= 权重 <= max 的元素个数；
+
+		ZLEXCOUNT key [小权重 [大权重
+			--> 返回key值中小权重元素与大权重元素之间（左闭右闭）的元素个数；
+				可以使用 - 来表示key值中的最小权重元素，+ 来表示key值中的最大权重元素；
+				可以使用 ( 来替代 [ 表示左开右开；
+
+		ZSCORE key value
+			--> 返回key值中value元素的权重；若value不存在于key值中或key不存在，则返回nil；
+
+		ZRANGE key start end [WITHSCORES]
+			--> 返回key值中位置索引从start至end（从小到大，左闭右闭）的所有元素；
+			--> WITHSCORES - 声明该参数后，每个元素都会跟上它的权重一起返回；
+
+		ZREVRANGE key start end [WITHSCORES]
+			--> 返回key值中位置索引从start至end（从大到小，左闭右闭）的所有元素；
+			--> WITHSCORES - 声明该参数后，每个元素都会跟上它的权重一起返回；
+
+		ZRANGEBYSCORE key [(]小权重 [(]大权重 [WITHSCORES] [LIMIT offset count]
+			--> 返回key值中权重从小权重至大权重之间（左闭右闭）的所有元素；
+			    ( - 声明该参数后，小权重至大权重的区间为左开右开；
+			    WITHSCORES - 声明该参数后，每个元素都会跟上它的权重一起返回；
+			--> LIMIT - 声明该参数后，必须声明offset和count参数；
+			            声明LIMIT表示命令的返回值做分页处理；
+			            offset表示结果的起始位置；
+			            count表示结果的数量；
+
+		ZREVRANGEBYSCORE key [(]大权重 [(]小权重 [WITHSCORES] [LIMIT offset count]
+			--> 同上，只不过是权重按照从大到小的顺序排序；
+
+		ZREMRANGEBYSCORE key [(]小权重 [(]大权重
+			--> 删除key值中权重从小权重至大权重之间（左闭右闭）的所有元素；
+			    ( - 声明该参数后，小权重至大权重的区间为左开右开；
+
+		ZRANK key value
+			--> 返回key值中value元素的排名（排名从0开始，按照元素权重从小到大的顺序）
+
+		ZREVRANK key value
+			--> 返回key值中value元素的排名（排名从0开始，按照元素权重从大到小的顺序）
+
+		针对所有元素权重相同的Sorted Sets
+		ZRANGEBYLEX key [min [max [LIMIT offset count]
+			--> 返回key值中索引位置从min至max之间（左闭右闭）的所有元素；
+			    由于key值中所有元素的权重都相同，所以元素是按照字典正序排序，即元素名的ASCII字符集顺序；
+				可以使用 - 来表示key值中的最小索引位置元素，+ 来表示key值中的最大索引位置元素；
+				可以使用 ( 来替代 [ 表示左开右开；
+			--> LIMIT - 声明该参数后，必须声明offset和count参数；
+			            声明LIMIT表示命令的返回值做分页处理；
+			            offset表示结果的起始位置；
+			            count表示结果的数量；
+
+		ZREVRANGEBYLEX key [大权重 [小权重 [LIMIT offset count]
+			--> 同上，只不过是元素按照字典反序排序，即元素名的逆ASCII字符集顺序；
+
+		ZREMRANGEBYLEX key [min [max
+			--> 删除key值中索引位置从min至max之间（左闭右闭）的所有元素；
+				由于key值中所有元素的权重都相同，所以元素是按照字典正序排序，即元素名的ASCII字符集顺序；
+				可以使用 - 来表示key值中的最小索引位置元素，+ 来表示key值中的最大索引位置元素；
+				可以使用 ( 来替代 [ 表示左开右开；
+
+	· Hashes的相关命令
+		HDEL key 字段1 [字段2 ...]
+			--> 删除key值中的一个[或多个]字段；若字段不存在，则忽略它；若key不存在，则返回0；
+
+		HEXISTS key 字段
+			--> 查询key值中是否存在'字段'；
+			--> ctype: 1/0（若字段存在，则返回1；若不存在，则返回0）
+			--> 返回key值中'字段'关联的值；
+
+		HGET key 字段
+
+		HMGET key 字段1 [字段2 ...]
+			--> 返回key值中一个[或多个]'字段'关联的值；若字段不存在，则返回nil；
+
+		HSET key 字段 value
+			--> 将key值中指定'字段'的值修改为value；若字段已存在，用对应的value修改它的值；若key不存在，则创建一个Hashes并映射至key；
+
+		HSETNX key 字段 value
+			--> 仅当key值中不存在指定'字段'时，添加该'字段'及其关联的值；
+			    若key不存在，则创建一个Hashes并映射至key；
+			    若指定'字段'已存在，不执行任何操作；
+
+		HSTRLEN key 字段
+			--> 返回key值中指定'字段'的字符串长度；若key或指定'字段'不存在，则返回0；
+
+		HMSET key 字段1 value1 [字段2 value2 ...]
+			--> 向key值中添加一个[或多个]字段及其关联的值；若字段已存在，用对应的value修改它的值；若key不存在，则创建一个Hashes并映射至key；
+
+		HGETALL key
+			--> 返回key值中所有的字段及字段的值；
+
+		HKEYS key
+			--> 返回key值中所有的字段；
+
+		HVALS key
+			--> 返回key值中所有字段的'值'；
+
+		HINCRBY key 字段 增值
+			--> 将key值中指定'字段'的值自增'增值'（增值可以为负数）；
+
+		HLEN key
+			--> 返回key值中字段的个数；
+
+	· HyperLogLogs的相关命令
+		PFADD key 元素1 [元素2 元素3 ...]
+			--> 将一个[或多个]元素添加到以key为变量名的HyperLogLog结构中；
+			    若key不存在，则创建一个空的HyperLogLog结构；
+
+		PFCOUNT key1 [key2 ...]
+			-->
+
+		PFMERGE 目的key 源key1 [源key2 ...]
+			-->
+
+	· 服务器端的相关命令
+		CLIENT LIST
+			--> 返回连接到当前Redis的所有客户端信息，返回值为特殊格式的字符串；
+			    形如：   id: 唯一的64位的客户端ID(Redis 2.8.12加入)。
+						addr: 客户端的地址和端口
+						fd: 套接字所使用的文件描述符
+						age: 以秒计算的已连接时长
+						idle: 以秒计算的空闲时长
+						flags: 客户端 flag
+						db: 该客户端正在使用的数据库 ID
+						sub: 已订阅频道的数量
+						psub: 已订阅模式的数量
+						multi: 在事务中被执行的命令数量
+						qbuf: 查询缓冲区的长度（字节为单位， 0 表示没有分配查询缓冲区）
+						qbuf-free: 查询缓冲区剩余空间的长度（字节为单位， 0 表示没有剩余空间）
+						obl: 输出缓冲区的长度（字节为单位， 0 表示没有分配输出缓冲区）
+						oll: 输出列表包含的对象数量（当输出缓冲区没有剩余空间时，命令回复会以字符串对象的形式被入队到这个队列里）
+						omem: 输出缓冲区和输出列表占用的内存总量
+						events: 文件描述符事件
+						cmd: 最近一次执行的命令
+				客户端flag可以是：
+						O: 客户端是 MONITOR 模式下的附属节点（slave）
+						S: 客户端是一般模式下（normal）的附属节点
+						M: 客户端是主节点（master）
+						x: 客户端正在执行事务
+						b: 客户端正在等待阻塞事件
+						i: 客户端正在等待 VM I/O 操作（已废弃）
+						d: 一个受监视（watched）的键已被修改， EXEC 命令将失败
+						c: 在将回复完整地写出之后，关闭链接
+						u: 客户端未被阻塞（unblocked）
+						U: 通过Unix套接字连接的客户端
+						r: 客户端是只读模式的集群节点
+						A: 尽可能快地关闭连接
+						N: 未设置任何 flag
+
+		CLIENT KILL ADDR IP地址:端口号 / ID 客户端ID / TYPE normal或slave或pubsub
+			--> 通过 IP地址和端口号 关闭已连接的客户端
+			        客户端ID      关闭已连接的客户端
+			        某一类        关闭已连接的客户端
+			--> 如果声明多种途径，则视作逻辑与操作(相当于AND)
+
+		DBSIZE
+			--> 返回当前的Redis中的key数量
+
+		TIME
+			--> 返回当前的Redis的当前时间
+
+		SHUTDOWN SAVE / NOSAVE
+			--> 关闭当前的Redis
+			--> 如果未设置持久化，则SAVE参数可以强制数据库储存
+			    如果已设置持久化，则NOSAVE参数可以阻止数据库储存
+
+		FLUSHDB
+			--> 清空当前的Redis的当前数据库
+
+		FLUSHALL
+			--> 清空当前的Redis的所有数据库
+
+		SLAVEOF IP地址 端口号
+			--> 动态指定当前的Redis(作为从服务器）的主服务器
+
+		CONFIG SET 参数 值
+			--> 动态设置当前的Redis的配置
+
+		CONFIG GET 参数
+			--> 获取当前的Redis的配置的值
+
+		BGREWRITEAOF
+			--> 异步重写AOF文件，该命令将依据当前的AOF文件创建一个体积优化最好的版本；
+
+	· 脚本的相关命令
+		EVAL Lua脚本 脚本参数个数 实参1 实参2 ... 余参1 余参2 ...
+			--> 执行Luau脚本并返回结果；
+			    Lua脚本的返回值是Lua结构，通过EVAL命令可以转换成Redis结构；
+			    从语义推荐，Lua脚本应该通过传参的方式使用，而不是在脚本中直接输入实参，
+			    因此，Lua脚本中使用形参KEYS[1], KEYS[2], ...来接收输入的实参（注意下标从1开始，必须全大写）
+			                 使用形参ARGV[1], ARGV[2], ...来接收多余数量的实参（注意下标从1开始，必须全大写）；
+			    Lua脚本中有2个方法用于操作Redis命令并返回结果：
+			        redis.call() 和 redis.pcall()
+
+		EVALSHA Lua脚本摘要值 脚本参数个数 实参1 实参2 ... 余参1 余参2 ...
+			--> 根据摘要值执行已缓存的Lua脚本并返回结果；
+
+		SCRIPT LOAD Lua脚本
+			--> 缓存指定的Lua脚本并返回脚本的sha1摘要值；
+
+		SCRIPT EXISTS Lua脚本摘要值1 [Lua脚本摘要值2 Lua脚本摘要值3 ...]
+			--> 检测一个或多个Lua脚本是否得到缓存；
+			    该命令的返回值是1或0的列表；
+
+		SCRIPT KILL
+			--> 杀死当前正在运行的Lua脚本（当且仅当该脚本未执行任何写操作时才会生效）；
+			    如果该脚本已执行写操作，则只能通过SHUTDOWN NOSAVE命令中止（因为Lua脚本的原子性）；
+			--> 该命令多用于中止运行时间过长的脚本；同时，执行Lua脚本的另一客户端会从执行EVAL命令后的阻塞状态下返回一个错误；
+
+		SCRIPT FLUSH
+			--> 清楚当前的Redis中已缓存的所有Lua脚本；
+
+	· 事务的相关命令
+		MULTI
+			--> 标记一个事务的开始，即开启了事务队列；
+			--> 事务是一个单独的隔离操作：事务中的所有命令都会序列化、按顺序地执行。事务在执行的过程中，不会被其他客户端发送来的命令请求所打断；
+				事务是一个原子操作：事务中的命令要么全部被执行，要么全部都不执行；
+			--> 开始事务后，后续的命令可能出现错误：
+			    如果出现在EXEC(执行命令)之前，则当前的redis会将错误信息作为错误命令的返回值，但不会影响后续命令的输入；
+			    	只不过执行EXEC之后，会返回错误并取消本次事务操作（换句话说，错误命令后的其他命令白输了）；
+			    如果出现在EXEC(执行命令)之后，则当前的redis不会对错误进行特别处理，
+			    	同时事务队列中的一条命令出错，并不会阻止后续命令的继续执行；
+
+		DISCARD
+			--> 清空事务队列中的所有命令并取消本次事务；
+
+		WATCH key1 [key2 key3 ...]
+			--> 开启对一个或多个key的监视（即为事务提供check-and-set的CAS操作，乐观锁）；
+			    对key的监视有效期为：WATCH命令之后，EXEC命令之前；
+			    在EXEC之前，如果被监视的任何key被修改，则取消本次事务（类似于线程、进程同步的作用）；
+
+		UNWATCH
+			--> 在EXEC之前，手动取消对所有key的监视；
+
+		EXEC
+			--> 按顺序执行事务队列中的所有命令，同时取消所有key的监视；
+
+	· 常用的相关命令
+		AUTH 密码
+			--> 客户端连接之前输入验证密码
+
+		QUIT
+			--> 客户端请求关闭连接，
+			--> ctype: "OK"
+
+		SELECT 数据库索引
+			--> 切换至【指定索引】的数据库，默认连接的是DB0数据库
+
+	· Key的相关命令
+		DEL key1 [key2 key3 ...]
+			--> 删除一个[或多个]key值，如果key不存在，则忽略它
+			--> ctype: 被成功删除的key值个数
+
+		DUMP key
+			--> 将key值序列化，可以使用RESTORE命令反序列化
+			--> ctype: 被序列化的key值
+
+		RESTORE key ttl 序列化的值
+			--> 反序列化值，将其与指定的key建立映射，ttl为指定的key设置超时时间（如果ttl为0，则永久存在）
+			--> ctype: 错误/OK
+
+		EXISTS key
+			--> 检测key是否存在
+			--> ctype: 1/0（如果存在，返回1；如果不存在，返回0）
+
+		EXPIRE key 秒数
+			--> 为key设置超时时间（秒数表示）
+			--> ctype: 1/0（如果设置成功，返回1；如果key不存在或无法设置，返回0）
+
+		PEXPIRE key 毫秒数
+			--> 为key设置超时时间（毫秒数表示）
+			--> ctype: 1/0（如果设置成功，返回1；如果key不存在或无法设置，返回0）
+
+		EXPIREAT key 时间戳
+			--> 为key设置超时时间（时间戳表示）
+			--> ctype: 1/0（如果设置成功，返回1；如果key不存在或无法设置，返回0）
+
+		PEXPIREAT key 时间戳
+			--> 为key设置超时时间（时间戳表示）
+			--> ctype: 1/0（如果设置成功，返回1；如果key不存在或无法设置，返回0）
+
+		TTL key
+			--> 查询key的超时时间（秒数表示）
+			--> ctype: 剩余的超时时间/-1/-2（如果是-1，表示key存在但永久有效；如果是-2，表示key不存在或已经过期）
+
+		PTTL key
+			--> 查询key的超时时间（毫秒表示）
+			--> ctype: 剩余的超时时间/-1/-2（如果是-1，表示key存在但永久有效；如果是-2，表示key不存在或已经过期）
+
+		RANDOMKEY
+			--> 返回一个随机的key，如果当前数据库为空，则返回nil
+			--> ctype: 随机的key
+
+		RENAME key newkey
+			--> 将key重命名为newkey；若key与newkey相同，则返回错误；若newkey已存在，则值被覆盖；
+
+		RENAMENX key newkey
+			--> 当newkey不存在时，才将key重命名为newkey；若key不存在，则返回错误；
+			--> ctype: 1/0（如果重命名成功，返回1；如果newkey已存在，返回0）
+
+		TYPE key
+			--> 查询key值的数据类型，例如，string, list, set, zset, hash等
+			--> ctype: key的数据类型/none（如果key不存在，则返回none）
+
+		MOVE key db
+			--> 将key迁移到指定的数据库db中
+			--> ctype: 1/0（如果迁移成功，返回1；如果迁移失败，返回0）
+
+		PERSIST key
+			--> 移除key的超时时间
+			--> ctype: 1/0（如果移除成功，返回1；如果key不存在或无法设置，返回0）
+
+
+持久化
+--------------------------------
+	Redis提供2种持久化方案：RDB和AOF，建议二者结合使用；
+	1）RDB方案 - 固定时间节点全盘保存一遍数据库信息
+		默认文件名：dump.rdb，工作流程如下：
+		· Redis 调用forks. 同时拥有父进程和子进程。
+		· 子进程将数据集写入到一个临时 RDB 文件中。
+		· 当子进程完成对新 RDB 文件的写入时，Redis 用新 RDB 文件替换原来的 RDB 文件，并删除旧的 RDB 文件。
+	2）AOF方案 - 每秒/每次写操作/从不保存一遍数据库信息
+	    默认文件名：appendonly.aof，工作方式有3钟：
+		· 每次有新命令追加到 AOF 文件时就执行一次 fsync ：非常慢，也非常安全
+		· 每秒 fsync 一次：足够快（和使用 RDB 持久化差不多），并且在故障时只会丢失 1 秒钟的数据。
+		· 从不 fsync ：将数据交给操作系统来处理。更快，也更不安全的选择。
+
+	RDB方案切换至AOF方案
+	1）为最新的 dump.rdb 文件创建一个备份。
+	2）将备份放到一个安全的地方。
+	3）执行以下两条命令:
+		redis-cli config set appendonly yes
+		redis-cli config set save “”
+	   确保写命令会被正确地追加到 AOF 文件的末尾。
+	   执行的第一条命令开启了 AOF 功能：Redis 会阻塞直到初始 AOF 文件创建完成为止，之后 Redis 会继续处理命令请求，并开始将写入命令追加到 AOF 文件末尾。
+	   执行的第二条命令用于关闭 RDB 功能。这一步是可选的，如果你愿意的话，也可以同时使用 RDB 和 AOF 这两种持久化功能。
+    重要:别忘了在 redis.conf 中打开 AOF 功能！否则的话，服务器重启之后，之前通过 CONFIG SET 设置的配置就会被遗忘，程序会按原来的配置来启动服务器。
+
+主从配置
+--------------------------------
+	配置流程
+	1.在从服务器的.conf文件中设置： slaveof 主服务器的IP 主服务器的端口号
+	2.如果主服务器设置有密码，则在从服务器的.conf文件中额外设置： masterauth 主服务器的密码
+
+主从切换
+--------------------------------
+	Sentinel系统
+
+与Python交互
+--------------------------------
+
+'''

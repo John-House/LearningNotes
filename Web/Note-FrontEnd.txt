@@ -1,0 +1,994 @@
+'''
+HTML
+=============================================
+<!DOCTYPE html>
+
+
+<html lang='xx'>...</html>
+	--> lang='en'		      --> 英文页面
+		    ='zh-cmn-Hans'    --> 简体中文页面
+		    ='zh-cmn-Hant'    --> 繁体中文页面
+
+
+<head>...</head>
+	--> 定义网页的head内容
+
+
+	<meta charset='xx'>
+		--> charset='UTF-8'    --> 页面默认编码格式,常见的有
+								   'GBK' ,对应简体中文
+								   'BIG5' ,对应繁体中文
+								   'ISO-8859-1' ,对应英文
+								   'iso-2022-jp' ,对应日文
+								   'ks_c_5601' ,对应韩文
+
+		--> 等价于 <meta http-equiv='content-Type' content='text/html;charset=UTF-8'>
+
+	<meta http-equiv='x-dns-prefetch-control' content='on/off'>
+		--> content='on'    --> 如果为'on',表示开启DNS预读取（优化页面加载速度）
+								为此需要搭配<link href='预读取的URL' rel='dns-prefetch'>
+
+	<meta http-equiv='refresh' content='xx;url=xxx'>
+		--> xx    --> 秒数,表示等待多少秒后自动刷新页面
+		--> xxx   --> 网址,表示自动刷新后转到该网址
+
+	<meta http-equiv='X-UA-Compatible' content='IE=edge,chrome=1'>
+		--> 设置兼容性，表示客户端优先使用'IE的最新版本'和'Chrome的最新版本'
+
+	<meta name='keyword' content='xxx'>
+		--> 定义网页的关键字，用于搜索引擎的爬取
+
+	<meta name='description' content='xxx'>
+		--> 定义网页的摘要信息，用于快照
+
+	<meta name='author' content='xxx'>
+		--> 定义网页的作者信息
+
+	<meta name='copyright' content='xxx'>
+		--> 定义网页的版权信息
+
+	<meta name='renderer' content='webkit/ie-comp/ie-stand'>
+		--> 定义网页渲染时使用的内核（webkit：极速核，ie-comp：IE兼容内核，ie-stand：IE标准内核）
+
+	<meta name='viewport' content='width=x1, initial-scale=x2, maximum-scale=x3, minimun-scale=x4, user-scalable=x5'>
+		--> 定义移动端网页的调整
+		--> 移动端网页由虚拟的'窗口'呈现，这个'窗口'分为2部分：一个是无形的不可改变形状尺寸的“layout viewport”，另一个是可见的可供用户缩放的“visual viewport”
+			width         --> 控制'窗口'的实际大小（如果为device-width，则是手机浏览器大小）
+			initial-scale --> 页面首次加载时的缩放比例
+			maximum-scale --> 允许用户缩放的最大比例
+			minimum-scale --> 允许用户缩放的最小比例
+			user-scalable --> 是否允许用户缩放（如果为0，则禁止；如果为1，则允许）
+
+
+	<link href='xx' rel='xx' type='xx'>
+		--> link标签只能存在于head标签中；link标签先有href属性，才会有rel属性
+		--> href='网站URL' rel='dns-prefetch'    			   				 --> 预加载URL
+
+		    href='样式表路径' rel='stylesheet' type='text/css' media='screen/tv/print/all'    --> 外链接至样式表
+
+		    href='图标路径' rel='shortcut icon' size='h x w'      			 --> 链接至网页图标（适用于ICO图标的浏览器）
+		    href='图标路径' rel='icon' size='h x w'              				 --> 链接至网页图标（适用于兼容PNG图标的浏览器）
+			href='图标路径' rel='apple-touch-icon-precomposed' size='h x w'    --> 链接至网页图标（适用于移动端的浏览器）
+
+			href='网站URL' rel='next'      									 --> 链接至下一篇文档
+			href='网站URL' rel='prev'										 --> 链接至上一篇文档
+			href='网站URL' rel='help' 										 --> 链接至帮助文档
+			href='网站URL' rel='up' 											 --> 链接至相关文档
+
+
+	<script>...</script>
+		--> 定义js脚本
+		--> src='脚本路径' ,多通过外链导入js脚本
+
+
+	<style>...</style>
+		--> 定义css样式
+		--> 多通过link标签外链导入css样式
+
+
+	<title>...</title>
+		--> 定义网页显示的标题
+
+
+<body>...</body>
+	--> 定义网页的body内容
+
+
+<frameset rows='x' cols='x'>...</frameset>
+	--> 定义网页的框架内容（body和frameset标签只能存在一个）
+	--> rows/cols = '百分比/px/*' ,百分比指占浏览器的多少；*表示根据浏览器剩余的空间自行调整
+
+
+	<div>...</div>
+		--> 定义div
+
+	<header>...</header>
+		--> 语义标签, 定义页眉
+	<footer>...</footer>
+		--> 语义标签, 定义页脚
+	<section>...</section>
+		--> 语义标签, 定义主体内容
+	<article>...</article>
+		--> 语义标签, 定义文本内容
+	<aside>...</aside>
+		--> 语义标签, 定义侧栏内容
+
+	<p>...</p>
+		--> 定义段落
+
+	<h1>...</h1>
+		--> 定义标题（h1~h6）
+
+	<abbr title="缩写的全称">...</abbr>
+		--> 定义缩写文本
+
+	<b>...</b>
+	 	--> 定义加粗文本
+	<strong>...</strong>
+		--> 定义加粗文本
+
+	<i>...</i>
+		--> 定义斜体文本
+	<dfn>...</dfn>
+		--> 定义斜体文本
+	<em>...</em>
+		--> 定义斜体文本
+
+	<u>...</u>
+		--> 定义下划线文本
+	<del>...</del>
+		--> 定义删除线文本
+
+	<q>...</q>
+		--> 定义双引号文本
+
+	<sup>...</sup>
+		--> 定义上标文本
+	<sub>...</sub>
+		--> 定义下标文本
+
+
+	<br>
+		--> 定义换行
+
+
+	<hr>
+		--> 定义水平线
+
+
+	<progress value='xx' max='xxx'></progress>
+		--> 定义进度条
+		--> value为当前值, max为最大值
+		--> 进度条有css属性来定义朝向, orient: horizontal/ vertical/ inline/ block
+
+
+	<ul>
+		<li>...</li>
+		.
+		.
+		.
+	</ul>
+
+	<ol>
+		<li>...</li>
+		.
+		.
+		.
+	</ol>
+		--> ul ,定义无序列表；ol ,定义有序列表
+
+
+	<details open>
+		<summary>...</summary>
+		<p>...</p>
+		.
+		.
+		.
+	</details>
+		--> 定义可折叠/展开的文本（折叠时显示'三角形'符号）, open属性表示默认展开
+		--> summary标签, 定义了折叠时显示的'标题'
+		--> p标签, 定义了展开时显示的'内容'
+
+	<dl>
+		<dt>...</dt>
+		<dd>...</dd>
+		.
+		.
+		.
+	</dl>
+		--> 定义'名词'+'解释'的文本
+
+
+	<form action='表达提交的URL' method='提交的方式' autocomplete='on/off'></form>
+		--> 定义表单
+
+		<input type='xx' name='xx' value='xx' autocomplete='on/off' list='id值' placeholder='xx' checked='checked' readonly='readonly' required='required'>
+			--> 定义输入框
+			--> checked属性定义默认选中的内容；readonly属性定义只读的内容；required属性定义必填的内容；
+			--> placeholder属性定义提示文本（与value属性二选其一）
+			--> name属性定义表单提交时当前输入框的'key'值
+			--> value属性定义表单提交时当前输入框的'value'值，或者输入框的默认值
+
+			--> type='radio' ,定义单选框 -> 多个单选框的name属性相同，则产生互斥
+				type='checkbox' ,定义复选框 -> 多个复选框的name属性相同，则表单提价时'key'相同
+
+				type='text' ,定义文本输入框
+				type='password' ,定义密码输入框
+				type='search' ,定义搜索输入框
+
+				type='button' ,定义按钮
+				type='file' ,定义文件按钮
+				type='image' ,定义图片提交按钮 -> height='xx' width='xx' src='图片URL' alt='submit'
+				type='submit' ,定义提交按钮
+				type='reset' ,定义重置按钮
+
+				type='hidden' ,定义隐藏输入框
+
+
+			<datalist id='xx'>
+				<option value='xx'>...</option>
+				.
+				.
+				.
+			</datalist>
+				--> 定义下拉输入框，与input标签搭配使用
+				--> value属性的值显示在下拉列表的左侧，
+					...的值显示在下拉列表的右侧
+
+
+		<label for="id值">...</label>
+			--> 与input标签搭配使用，使得label标签的内容也被当做选择区域
+			--> for属性绑定input标签的id属性
+
+
+		<textarea cols='列数' rows='行数' name='xx' placeholder'提示文本'>...</textarea>
+			--> ...部分的内容会预先输入至textarea标签的输入框中，
+				是实打实的文本，与placeholder的提示文本不同
+
+
+		<select name='xx' size='xx' multiple='multiple'>
+			<optgroup label='xx'>
+				<option value='xx' selected='selected'>...</option>
+				.
+				.
+				.
+			</optgroup>
+			.
+			.
+			.
+		</select>
+			--> 定义下拉选框
+			--> 如果未指定size属性，则表现为'上下箭头'的下拉选框；否则，表现为'导航条'的小窗口
+			--> label属性为option分类的类名
+			--> value属性的值为表单提交时的'value'值；...的值为显示内容
+
+
+		<fieldset>
+			<legend>...</legend>
+			.
+			.
+			.
+		</fieldset>
+			--> 打包表单内容
+			--> legend标签中的...表示打包部分的标题
+			    .\n.\n.表示被打包的表单内容
+
+
+	<img src='图片URL' alt='替代文本' title='说明文本' height='xx' width='xx' usemap='#id名'>
+		--> 定义图片
+		--> img标签尽量写入height属性和width属性，以便优化浏览器的渲染
+		--> usemap属性将开启客户端图片映射
+
+	<map name='xx' id='id名'>
+		<area shape='xx' coords='xx' href='xx' alt='xx'>
+		.
+		.
+		.
+	</map>
+
+		--> 定义图片映射，与img标签搭配使用
+		--> name属性和id属性应该相同，以便多浏览器兼容
+		--> shape='default'
+		    shape='rect' coords='x1,y1,x2,y2' -> 一对顶点确定的矩形映射区域
+		    shape='circle' coords='x,y,r'     -> 圆心+半径确定的圆形映射区域
+		    shape='poly' coords='x1,y1,...'   -> 多个顶点确定的多边形映射区域
+
+
+	<a href="链接URL" rel='xx' download='xx' target='xx'>...</a>
+		--> 定义超链接
+		--> href='mailto:邮箱地址'    -> 超链接至邮箱地址
+		    href='普通URL'
+		    href='#id名'             -> 链接至锚点
+		--> rel='xx' ,表明当前文档与链接URL的关系
+		--> download='xx' ,表明链接URL是下载操作，且xx为下载文件的显示名称（可以与真实名称不同）
+		--> target='_blank' ,在新窗口打开链接URL
+		    target='_self'  ,在同框架中打开链接URL（默认值）
+		    target='_parent' ,在父框架中打开链接URL
+		    target='_top'    ,在整个窗口中打开链接URL
+		    target='指定框架名',在指定框架中打开链接URL
+
+
+	<table border='xx' cellpadding='xx' cellspacing='xx' frame='xx' rules='xx' summary='xx'>
+		<caption>表格标题</caption>
+		<tr>
+			<th>加粗标题</th>
+		</tr>
+		<tr>
+			<td>单元格</td>
+		</tr>
+		.
+		.
+		.
+	</table>
+		--> 定义表格
+		--> border属性 ,定义表格外边框的宽度（如果指定了border属性，则默认显示所有单元格的边框，除非额外指定了frame和rules属性）
+			frame属性和rules属性 ,定义所有单元格的边框显示情况
+		    frame='void' 					  不显示外侧边框
+		         ='above'/'below'/'lhs'/'rhs' 显示外侧上方/下方/左方/右方边框
+		         ='hsides'/'vsides'           显示外侧竖直边框（上方和下方）/水平边框（左方和右方）
+		         ='box' 					  显示外侧边框
+
+			rules='none'					  不显示内侧边框
+				 ='rows'/'cols'               显示内侧水平/竖直边框
+				 ='all' 					  显示内侧边框
+
+			cellpadding属性 ,定义内容与单元格的间距
+		    cellspacing属性 ,定义单元格与单元格的间距
+
+		--> summary属性 ,无实际意义（适用于屏幕阅读器）
+
+
+	<audio src='音频URL' autoplay='autoplay' controls='controls' loop='loop' muted='muted' preload='xx'></audio>
+		--> 定义音频
+		--> autoplay ,定义音频就绪后自动播放
+			controls ,定义显示播放控件
+			loop     ,定义音频播放完毕后循环播放
+			muted    ,定义音频就绪后处于静音状态
+			preload  ,定义缓存信息（如果指定了autoplay属性，则忽略该属性）
+				preload='none'     -> 不缓存
+				       ='auto' 	   -> 页面加载后缓存音频文件
+				       ='metadata' -> 仅换缓存元数据
+
+	<audio autoplay='autoplay' controls='controls' loop='loop' muted='muted' preload='xx'>
+		<source src='格式1的URL' type='audio/格式1的后缀名'>
+		<source src='格式2的URL' type='audio/格式2的后缀名'>
+		.
+		.
+		.
+	</audio>
+		--> 定义多源文件的音频
+
+	<video src='视频URL' autoplay='autoplay' controls='controls' loop='loop' muted='muted' preload='xx' height='xx' width='xx' poster='封面图URL'></video>
+		--> 定义视频
+		--> autoplay ,定义视频就绪后自动播放
+			controls ,定义显示播放控件
+			loop     ,定义视频播放完毕后循环播放
+			muted    ,定义视频就绪后处于静音状态
+			preload  ,定义缓存信息（如果指定了autoplay属性，则忽略该属性）
+				preload='none'     -> 不缓存
+				       ='auto' 	   -> 页面加载后缓存音频文件
+				       ='metadata' -> 仅换缓存元数据
+			height   ,定义视频的高度
+			width    ,定义视频的宽度
+			poster   ,定义视频的封面图
+
+	<video autoplay='autoplay' controls='controls' loop='loop' muted='muted' preload='xx'>
+		<source src='格式1的URL' type='video/格式1的后缀名'>
+		<source src='格式2的URL' type='video/格式2的后缀名'>
+		<track src='webvtt/srt' kind='subtitles' srclang='xx'>
+		.
+		.
+		.
+	</audio>
+		--> 定义多源文件的视频
+		--> track标签定义了字幕文件（前提是kind属性为'sbutitles'）
+		    track标签必须位于video/audio标签中，source标签后
+		--> srclang属性 ,定义字幕的语言（如果kind属性为'subtitles'，则必须指定该属性）
+
+CSS
+=============================================
+
+选择器
+-----------------------
+	* {声明;}
+		--> 选中所有的元素（不推荐使用，会明显降低渲染性能）
+
+
+	ele {声明;}
+		--> 选中所有的ele元素
+	ele1,ele2,... {声明;}
+		--> 选中所有的ele1和ele2和...元素
+	ele1 ele2 {声明;}
+		--> 选中所有ele1元素下的ele2元素（子孙都被包含在内）
+	ele1>ele2 {声明;}
+		--> 选中所有ele1元素下的ele2元素（仅仅包含子元素）
+	ele1+ele2 {声明;}
+		--> 选中紧跟在ele1元素后的ele2元素（ele1和ele2同级且直接相邻）
+	ele1~ele2 {声明;}
+		--> 选中ele1元素后的所有ele2元素（ele1和ele2同级且仅限兄弟元素，而非子孙元素）
+
+
+	(ele).cls {声明;}
+		--> 选中所有class属性为cls的(ele)元素
+	.cls1.cls2.... {声明;}
+		--> 选中所有class属性为cls1和cls2和...的元素（class属性为多值属性）
+
+
+	#id {声明;}
+		--> 选中所有id属性为id的元素
+
+
+	(ele)[prop] {声明;}
+		--> 选中所有具有prop属性的(ele)元素
+	(ele)[prop1][prop2]... {声明;}
+		--> 选中所有具有prop1和prop2和...属性的(ele)元素
+	(ele)[prop='value'] {声明;}
+		--> 选中所有prop属性值为value的(ele)元素
+	(ele)[prop^='val'] {声明;}
+		--> 选中所有prop属性值以'val'开头的(ele)元素
+	(ele)[prop$='lue'] {声明;}
+		--> 选中所有prop属性值以'lue'结尾的(ele)元素
+	(ele)[prop*='alu'] {声明;}
+		--> 选中所有prop属性值出现'alu'的(ele)元素
+	(ele)[prop|='val-'] {声明;}
+		--> 选中所有prop属性值为'val'或以'val-'开头的(ele)元素
+
+
+	ele:link {声明;}
+		--> 选中所有未被访问的ele元素
+	ele:visited {声明;}
+		--> 选中所有已被访问的ele元素
+	ele:hover {声明;}
+		--> 选中所有被鼠标悬停的ele元素
+	ele:active {声明;}
+		--> 选中所有被激活的ele元素
+
+
+	ele:focus {声明;}
+		--> 选中所有成为输入焦点的ele元素
+
+
+	ele:first-child {声明;}
+		--> 选中第一个ele元素（ele必须是某个元素的子元素，某个元素最高是body元素）
+	ele:last-child {声明;}
+		--> 选中倒数第一个ele元素（ele必须是某个元素的子元素，某个元素最高是body元素）
+	ele:nth-child(n) {声明;}
+		--> 选中第n个ele元素，n可以是其他算式（ele必须是某个元素的子元素，某个元素最高是body元素）
+	ele:nth-last-child(n) {声明;}
+		--> 选中倒数第n个ele元素，n可以是其他算式（ele必须是某个元素的子元素，某个元素最高是body元素）
+
+
+	ele:checked {声明;}
+		--> 选中所有处于选中状态的ele元素
+	ele:enabled  {声明;}
+		--> 选中所有处于可用状态的ele元素
+	ele:disabled {声明;}
+		--> 选中所有处于禁用状态的ele元素
+
+
+	ele::first-letter {声明;}
+		--> 选中ele元素的第一个字符
+	ele::first-line {声明;}
+		--> 选中ele元素的第一行
+	ele::before {content: xx;声明;}
+		--> 选中ele元素前的虚拟元素
+		--> content可以取值：
+			none             --> 在ele元素前不插入任何值
+			attr(ele的属性名)  --> 在ele元素前插入ele的属性值
+			url(外部资源的URL) --> 在ele元素前插入外部的资源文件
+			'xxxx'           --> 在ele元素前插入字符串（注意转义）
+	ele::after {content: xx;声明;}
+		--> 选中ele元素后的虚拟元素
+		--> content可以取值：
+			none             --> 在ele元素后不插入任何值
+			attr(ele的属性名)  --> 在ele元素后插入ele的属性值
+			url(外部资源的URL) --> 在ele元素后插入外部的资源文件
+			'xxxx'           --> 在ele元素后插入字符串（注意转义）
+	ele::placeholder {声明;}
+		--> 选中ele元素中的placeholder属性内容
+
+
+CSS样式单位
+-----------------------
+	绝对长度
+	1in = 2.54cm = 25.4 mm = 101.6q = 72pt = 6pc = 96px
+
+	绝对角度
+	90deg = 100grad = 0.25turn ≈ 1.570796326794897rad
+	  度        梯度        圈                     弧度
+
+
+CSS样式
+-----------------------
+水平对齐
+	方法一
+		对齐对象 -> 当前元素
+		对齐方法 -> 当前元素 {margin: 0 auto;}
+		对齐条件 -> 当前元素是块级、非浮动元素
+		额外处理 -> None
+
+	方法二
+		对齐对象 -> 当前元素
+		对齐方法 -> 当前元素 {display: inline-block;}
+				  父元素 {text-align: center;}
+		对齐条件 -> None
+		额外处理 -> 去除当前元素之间的间隙(调整标签结构或jQuery-nodeType)
+
+	方法三
+		对齐对象 -> 当前元素
+		对齐方法 -> 当前元素 {float: left;
+		                   position: relative;
+		                   left: -50%;}
+		          夹层元素 {float: left;
+		          		 position: relative;
+		          		 left: 50%;}
+		对齐条件 -> None
+		额外处理 -> 在当前元素和其父元素之间创建(或选定)夹层元素
+
+	方法四
+		对齐对象 -> 当前元素
+		对齐方法 -> 当前元素 {float: left;
+						   position: relative;
+						   left: -50%;}
+				  夹层元素 {position: absolute;
+				  		  left: 50%;}
+				  父元素 {position: relative;}
+		对齐条件 -> 父元素足够宽，否则当前元素水平方向上排列不下(会产生换行)
+		额外处理 -> 在当前元素和其父元素之间创建(或选定)夹层元素
+
+	方法五
+		对齐对象 -> 当前元素
+		对齐方法 -> 当前元素 {float: left;}
+		          父元素 {width: fit-content;
+		          	     margin: 0 auto;}
+		对齐条件 -> 对浏览器的兼容性要求高
+		额外处理 -> None
+
+垂直对齐
+	方法一
+		对齐
+
+
+
+
+定位
+	position: static     --> 变为非定位元素，常规流（默认）
+			  fixed      --> 变为定位元素，浮起（以窗口为包含块，绝对定位）
+			  absolute   --> 变为定位元素，浮起（以最近的定位祖先元素为包含块，绝对定位）
+			  relative   --> 变为定位元素，常规.浮起（以常规的自己为包含块，相对定位）
+
+	z-index: auto        --> 定位层级为0（默认）
+			 数字         --> 常规流为0，定位元素的数字越大越突出屏幕，越小越深陷屏幕，
+			 						          数字相同时，元素出现顺序越后越突出屏幕，
+
+	top: 长度/百分比       --> 仅限定位元素，定位元素相对其包含块顶界的偏移量
+	bottom: 长度/百分比    --> 仅限定位元素，定位元素相对其包含块底界的偏移量
+	left: 长度/百分比      --> 仅限定位元素，定位元素相对其包含块左界的偏移量
+	right: 长度/百分比     --> 仅限定位元素，定位元素相对其包含块右界的偏移量
+
+	clip: auto           --> 仅限绝对定位元素，不裁剪（默认）
+	      rect:偏移       --> 仅限绝对定位元素，按照偏移量裁剪
+			   				 偏移按照'上-右-下-左'的顺序计算，每个顺序上都从左上顶点开始
+			   			 --> 推荐使用clip-path属性代替clip
+
+
+布局
+	display: none        --> 选中元素被隐藏（即不存在，而非不显示）
+	         block       --> 选中元素变为块级元素
+	         inline      --> 选中元素变为内联元素
+	         inline-block--> 选中元素变为内联块级元素
+			 list-item   --> 选中元素变为列表项目元素
+			 box         --> 选中元素应用box布局
+			 flex        --> 选中元素（父元素）应用flex布局
+
+	float: none          --> 常规流（默认）
+	       left          --> 浮起（左浮动）
+	       right         --> 浮起（右浮动）
+
+	clear: none          --> 仅限块级元素，允许选中元素的两边有浮动元素（默认）
+	       both          --> 仅限块级元素，不允许选中元素的两边有浮动元素
+	       left          --> 仅限块级元素，不允许选中元素的左边有浮动元素
+	       right         --> 仅限块级元素，不允许选中元素的右边有浮动元素
+
+	visibility: visible  --> 选中元素可见
+	            hidden   --> 选中元素被隐藏（即不显示，而非不存在）
+	            collapse --> 同hidden，主要用于隐藏表格的行或列，让行或列腾出空间供其他内容占用
+
+	outline: width style color    --> 复合属性，设置选中元素的轮廓（轮廓位于元素的border外面，但不占据空间，也不影响元素的尺寸）
+	         width: 长度/thin/medium/thick    -> 默认为medium
+
+	         style: none/dotted/dashed/solid/double/groove/ridge/inset/outset    -> 默认为none
+
+	         color: 颜色
+
+
+光标
+	cursor: auto             --> 基于上下文决定光标形状
+	        none             --> 无光标形状
+	        default          --> 系统默认光标形状
+	        url('光标图片路径') --> 外部导入光标图片（.svg / .cur / .png）
+			crosshair        --> 十字线
+			pointer          --> 小手
+			move             --> 表明当前对象可被移动
+			text             --> 表明当前对象为文本
+			wait             --> 等待
+			help             --> 帮助
+			n-resize/e-resize/s-resize/w-resize     --> 表明当前对象可被向北(上)、向东(右)、向南(下)、向西(左)移动
+			ne-resize/nw-resize/se-resize/sw-resize
+
+
+伸缩盒模型（旧版，即BFC - Block Formatting Context）
+	box-sizing: content-box  --> 标准盒模型，即IE盒模型，选中元素的实际width = 设置width + padding + border
+	            border-box   --> 怪异盒模型，即W3C盒模型，选中元素的实际width = 设置width
+
+	width: auto          --> 仅限非table类元素和非置换内联元素（默认）
+		   长度/百分比     --> 仅限非table类元素和非置换内联元素，选中元素的设置width为'长度/百分比'
+
+	min-width: 0         --> 仅限非table类元素和非置换内联元素，选中元素的最小width为0（默认）
+			   长度/百分比 --> 仅限非table类元素和非置换内联元素，选中元素的最小width为'长度/百分比'
+
+	max-width: none      --> 仅限非table类元素和非置换内联元素，选中元素的最大width无限制（默认）
+			   长度/百分比 --> 仅限非table类元素和非置换内联元素，选中元素的最大width为'长度/百分比'
+
+	height: auto         --> 仅限非table类元素和非置换内联元素（默认）
+		    长度/百分比    --> 仅限非table类元素和非置换内联元素，选中元素的高度为'长度/百分比'
+
+	min-height: 0        --> 仅限非table类元素和非置换内联元素，选中元素的最小高度为0（默认）
+			    长度/百分比--> 仅限非table类元素和非置换内联元素，选中元素的最小高度为'长度/百分比'
+
+	max-height: none     --> 仅限非table类元素和非置换内联元素，选中元素的最大高度无限制（默认）
+			    长度/百分比--> 仅限非table类元素和非置换内联元素，选中元素的最大高度为'长度/百分比'
+
+	margin: auto/长度/百分比 --> 仅限非table类元素，选中元素的上和右和下和左的外边距均为'auto/长度/百分比'
+			* *            --> 仅限非table类元素，选中元素的上和下、右和左的外边距分别为'auto/长度/百分比'
+			* * *          --> 仅限非table类元素，选中元素的上、右和左、下的外边距分别为'auto/长度/百分比'
+			* * * *        --> 仅限非table类元素，选中元素的上、右、下、左的外边距分别为'auto/长度/百分比'
+
+	padding: 长度/百分比     --> 仅限非table类元素，选中元素的上和右和下和左的内边距均为'长度/百分比'
+			 * *           --> 仅限非table类元素，选中元素的上和下、右和左的内边距分别为'长度/百分比'
+			 * * *         --> 仅限非table类元素，选中元素的上、右和左、下的内边距分别为'长度/百分比'
+			 * * * *       --> 仅限非table类元素，选中元素的上、右、下、左的内边距分别为'长度/百分比'
+
+	border: 宽度 样式 颜色  --> 复合属性，统一设置选中元素的边框
+	border-top / border-right / border-bottom / border-left: 宽度 样式 颜色  --> 分别设置选中元素的边框
+
+	border-width: 宽度/thin(1px)/medium(3px)/thick(5px) --> 设置选中元素上和右和下和左边框的宽度
+				  * *								   --> 设置选中元素上和下、右和左边框的宽度
+				  * * *								   --> 设置选中元素上、右和左、下边框的宽度
+				  * * * * 							   --> 设置选中元素上、右、下、左边框的宽度
+
+	border-style: none     --> 统一设置选中元素的边框为无轮廓
+				  dotted   --> 统一设置选中元素的边框为点状轮廓
+
+	 			  dashed   --> 统一设置选中元素的边框为虚线轮廓
+				  solid    --> 统一设置选中元素的边框为实线轮廓
+				  double   --> 统一设置选中元素的边框为双实线轮廓
+
+				  groove   --> 统一设置选中元素的边框为3D凹槽轮廓
+				  ridge    --> 统一设置选中元素的边框为3D凸槽轮廓
+
+				  inset    --> 统一设置选中元素的边框为3D凹边轮廓
+				  outset   --> 统一设置选中元素的边框为3D凸边轮廓
+
+				  * *								   --> 设置选中元素上和下、右和左边框的样式
+				  * * *								   --> 设置选中元素上、右和左、下边框的样式
+				  * * * * 							   --> 设置选中元素上、右、下、左边框的样式
+
+	border-color: 颜色                                  --> 设置选中元素上和右和下和左边框的颜色
+	              * *								   --> 设置选中元素上和下、右和左边框的颜色
+				  * * *								   --> 设置选中元素上、右和左、下边框的颜色
+				  * * * * 							   --> 设置选中元素上、右、下、左边框的颜色
+
+	border-radius: 水平半径/竖直半径   --> 设置选中元素四角的水平半径和竖直半径
+		水平半径: 长度/百分比		--> 设置选中元素四角的水平半径为'长度/百分比'
+			     * *            --> 设置选中元素上左角和下右角、上右角和下左角的水平半径为'长度/百分比'
+			     * * *          --> 设置选中元素上左角、上右角和下左角、下右角的水平半径为'长度/百分比'
+			     * * *          --> 设置选中元素上左角、上右角、下右角、下左角的水平半径为'长度/百分比'
+		竖直半径: 同水平半径
+
+	box-shadow: none    	    								  --> 选中元素无阴影
+	            inset/(空) 水平偏移 竖直偏移 阴影模糊 阴影外延 阴影颜色   --> inset ,即内阴影；（空）,即缺省默认为外阴影
+
+
+伸缩盒模型（新版，即FFC - Flex Formatting Context）
+	flex-flow: flex-direction flex-wrap --> 复合属性
+
+	flex-direction: row            --> 选中元素（父元素）的主轴方向从左至右（默认）
+					row-reverse    --> 选中元素（父元素）的主轴方向从右至左
+					column         --> 选中元素（父元素）的主轴方向从上至下
+					column-reverse --> 选中元素（父元素）的主轴方向从下至上
+
+	flex-wrap: nowrap              --> 选中元素（父元素）的子元素排列不下时，多余的子元素不换行（默认）
+			   wrap                --> 选中元素（父元素）的子元素排列不下时，多余的子元素沿交叉轴换行
+			   wrap-reverse        --> 选中元素（父元素）的子元素排列不下时，多余的子元素逆交叉轴换行
+
+	justify-content: flex-start    --> 选中元素（父元素）的每行子元素沿主轴起始端对齐
+					 flex-end      --> 选中元素（父元素）的每行子元素沿主轴终止端对齐
+					 center        --> 选中元素（父元素）的每行子元素沿主轴居中对齐
+					 space-around  --> 选中元素（父元素）的每行子元素沿主轴均匀对齐（首、尾子元素离父元素边界有空余）
+					 space-between --> 选中元素（父元素）的每行子元素沿主轴均匀对齐（首、尾子元素离父元素边界无空余）
+
+	align-items: stretch           --> 选中元素（父元素）的每行子元素沿交叉轴伸缩占满选中元素（默认）
+				 flex-start        --> 选中元素（父元素）的每行子元素沿交叉轴起始端对齐
+				 flex-end          --> 选中元素（父元素）的每行子元素沿交叉轴终止端对齐
+			     center            --> 选中元素（父元素）的每行子元素沿交叉轴居中对齐
+			     baseline          --> 选中元素（父元素）的每行子元素沿交叉轴基线对齐（所有子元素的首行文字对齐）
+
+	align-content: stretch         --> 选中元素（父元素）的多行子元素沿交叉轴伸缩占满选中元素（默认）
+				   flex-start      --> 选中元素（父元素）的多行子元素沿交叉轴起始端对齐
+				   flex-end        --> 选中元素（父元素）的多行子元素沿交叉轴终止端对齐
+				   center          --> 选中元素（父元素）的多行子元素沿交叉轴居中对齐
+				   space-around    --> 选中元素（父元素）的多行子元素沿交叉轴均匀对齐（首、尾子元素行离父元素边界有空余）
+				   space-between   --> 选中元素（父元素）的多行子元素沿交叉轴均匀对齐（首、尾子元素行离父元素边界无空余）
+
+	order: 数字                     --> 选中元素（子元素）沿主轴排列时的位置（数字越小越靠近主轴起始端，数字可以为负，默认为0）
+
+	flex: flex-grow flex-shrink flex-basis    --> 复合属性
+
+	flex-grow: 数字                 --> 当父元素有剩余空间时，选中元素（子元素）沿主轴伸的比例（默认为0）
+
+	flex-shrink: 数字               --> 当父元素不够容纳所有的子元素时，选中元素（子元素）沿主轴缩的比例（默认为1）
+
+			* 关于flex-grow的计算 *
+				1.计算父元素的剩余空间，为S；
+				2.加总所有子元素的flex-grow值，为N；
+				3.每个子元素的flex-grouw值为n，则该子元素在【主轴方向上】将额外扩展 n/N * S；
+
+			* 关于flex-shrink的计算 *
+				1.计算父元素容纳所有子元素还需要的空间，为S；
+				2.加总所有子元素的flex-shrink值，为N；
+				3.每个子元素的flex-shrink值为n，则该子元素在【主轴方向上】将额外缩减 n/N * S；
+
+	flex-basis: auto               --> 选中元素（子元素）占据主轴的空间为本来大小（默认）
+	            尺寸                --> 选中元素（子元素）占据主轴的空间为指定大小（计算完该属性后，才能得出父元素是否有剩余空间）
+
+	align-self: auto               --> 选中元素（子元素）继承父元素沿交叉轴的对齐方式（默认）
+			    flex-start         --> 选中元素（子元素）沿交叉轴起始端对齐（个性化设置）
+				flex-end           --> 选中元素（子元素）沿交叉轴终止端对齐（个性化设置）
+			    center             --> 选中元素（子元素）沿交叉轴居中对齐（个性化设置）
+			    baseline           --> 选中元素（子元素）沿交叉轴基线对齐（所有子元素的首行文字对齐，个性化设置）
+
+
+背景
+	background: 图片链接 图片位置 图片尺寸 图片填充 图片固定 图片原点 图片剪裁 背景颜色  --> 复合属性，设置选中元素的背景
+
+		background-image: none                   --> 选中元素无背景图片填充
+						  <image>                --> 选中元素使用指定的图片填充，图片有多种指定方式：
+						      -> url('图片路径')
+						      -> image(图片路径/url('图片路径'), 图片失效时顶替颜色)
+
+		background-position: 长度/百分比/left/right/top/bottom/center *    --> 在水平方向（...)和竖直方向（*）上，图片从自己的什么位置开始填充
+
+		background-size: 长度/百分比/auto *        --> 在宽度（...）和高度（*）上，图片的大小设置（百分比为图片的百分比大小；auto为图片的实际大小）
+						 cover                   --> 图片等比缩放到完全覆盖选中元素（图片可能溢出选中元素）
+						 contain                 --> 图片等比缩放到契合选中元素的宽度或高度（图片始终位于选中元素内）
+
+	    background-repeat: repeat/no-repeat *    --> 在水平方向（...）和竖直方向（*）上，图片是否平铺
+	                       repeat-x              --> 等价于 repeat no-repeat（一次性设置两个值）
+	                       repeat-y              --> 等价于 no-repeat repeat（一次性设置两个值）
+
+		background-attachment: fiexed            --> 图片相对于窗口固定
+		                       scroll            --> 图片相对于选中元素固定，会随窗口滚动
+		                       local             --> 图片相对于选中元素的内容固定
+
+		background-origin: padding-box           --> 图片从选中元素的padding（含padding）区域开始显示
+		                   border-box            --> 图片从选中元素的border（含border）区域开始显示
+		                   content-box           --> 图片从选中元素的content区域开始显示
+
+		background-clip: padding-box             --> 图片从选中元素的padding（不含padding）区域开始向外裁掉图片
+		                 border-box              --> 图片从选中元素的border（不含padding）区域开始向外裁掉图片
+		                 content-box             --> 图片从选中元素的content区域开始向外裁掉图片
+		                 text                    --> 图片从选中元素的前景内容（例如文字）开始向外裁掉图片（类似遮罩效果）
+
+		background-color: 颜色                    --> 选中元素的背景颜色（如果设置了图片和颜色，图片将覆盖在颜色纸上）
+						  transparent            --> 选中元素的背景颜色透明
+
+
+	background: linear-gradient(度数,颜色1 长度/百分比,...,颜色n 长度/百分比)    --> 设置选中元素的背景线性渐变
+
+	background: radial-gradient(shape size at position-x position-y,颜色1 长度/百分比,...,颜色n 长度/百分比)    --> 设置选中元素的背景径向渐变
+					shape      -> circle/ellipse        -> 确定径向渐变的形状
+
+					size       -> 如果是circle           -> 长度/closest-side/closest-corner/farthest-side/farthest-corner
+						          如果是ellipse          -> 长度/百分比/closest-side/closest-corner/farthest-side/farthest-corner
+
+					at         -> 固定关键字
+
+					position-x -> 渐变中心在水平方向上的位置 -> 长度/百分比/left/center/right
+
+					position-y -> 渐变中心在竖直方向上的位置 -> 长度/百分比/top/center/bottom
+
+
+颜色
+	color: 颜色                                   --> 设置选中元素的文本颜色
+	opacity: 浮点数                               --> 设置选中元素的不透明度（默认为1.0，不透明；如果为0.0，则透明）
+
+
+列表
+	list-style: type position image              --> 仅限display: list-item的元素
+
+				type -> none                     -> 不使用项目符号
+					 -> disc/circle/square       -> 实心圆/空心圆/实心尖块
+					 -> decimal                  -> 阿拉伯数字
+					 -> lower-roman/upper-roman  -> 小写罗马数字/大写罗马数字
+					 -> lower-alpha/upper-alpha  -> 小写英文字母/大写英文字母
+					 -> lower-latin/upper-latin  -> 小写拉丁字母/大写拉丁字母
+
+				position -> outside              -> 项目符号位于文字之外（默认）
+				         -> inside               -> 项目符号位于文字之内
+
+				image -> none 					 -> 不使用图片替代项目符号
+				         url('图片路径')           -> 使用指定的图片替代项目符号
+
+
+字体
+	font: style variant weight size/height family --> 复合属性
+
+		  style -> normal/italic/oblique         -> 正常字体（默认）/斜体字体/人为斜体
+
+		  variant -> normal/small-caps           -> 正常字体（默认）/小型大写字体
+
+		  weight -> 100~900整百数/lighter/normal/bold/bolder -> 字体粗细（normal，即400为默认；bold，即700）
+
+		  size -> absolute-size/relative-size/长度/百分比 -> 字体大小
+		              absolute-size -> xx-small  -> 标题h6（medium的3/5大小）
+		                            -> x-small   ->        medium的3/4大小
+		                            -> small     -> 标题h5（medium的8/9大小）
+		                            -> medium    -> 标题h4（默认）
+		                            -> large     -> 标题h3（medium的6/5大小）
+		                            -> x-large   -> 标题h2（medium的3/2大小）
+		                            -> xx-large  -> 标题h1（medium的2/1大小）
+		              relative-size -> xx em        -> 相对于父元素的字号xx倍
+
+		  height -> normal/长度/百分比             -> 行高
+
+		  family -> family-name generic-family   -> 字体名称（多个时用引号包裹，逗号分隔） 字体序列名称（遍历字体序列找到某个字体）
+		                family-name    -> arial/georgia/verdana/helvetica/simsun/...
+		                generic-family -> cursive/fantasy/monospace/serif/sans-serif
+
+
+文本
+	text-transform: none                  --> 选中元素的文本不进行转换（默认）
+					uppercase             --> 将选中元素的文本的每个单词都转换成大写
+					lowercase             --> 将选中元素的文本的每个单词都转换成小写
+	                capitalize            --> 将选中元素的文本的每个单词的首字母转换成大写
+
+	text-align: start                     --> 仅限块级元素，选中元素（父元素）中的文本对齐开始边界（默认）
+				end                       --> 仅限块级元素，选中元素（父元素）中的文本对齐终止边界
+				left                      --> 仅限块级元素，选中元素（父元素）中的文本左对齐
+				right                     --> 仅限块级元素，选中元素（父元素）中的文本右对齐
+				center                    --> 仅限块级元素，选中元素（父元素）中的文本居中对齐
+				justify                   --> 仅限块级元素，选中元素（父元素）中的文本两端对齐（被强制打断的行和最后一行无效）
+				justify-all               --> 仅限块级元素，选中元素（父元素）中的文本两端对齐（对最后一行也同样适用）
+
+	text-indent: 长度/百分比 each-line/hanging    --> 仅限块级元素，选中元素（父元素）中的文本的'每个人为的换行（含首行）/反向缩进'缩进'长度/百分比'
+
+	text-decoration: line style color     --> 复合属性
+
+	                 line -> none         -> 选中元素中的文本无任何装饰（默认）
+	                      -> underline    -> 选中元素中的文本添加下划线
+	                      -> ouverline    -> 选中元素中的文本添加上划线
+	                      -> line-through -> 选中元素中的文本添加删除线
+	                      -> blink        -> 选中元素中的文本添加闪烁
+
+	                  style -> solid      -> 选中元素中的文本装饰是实线（默认）
+	                        -> dashed     -> 选中元素中的文本装饰是虚线
+	                        -> double     -> 选中元素中的文本装饰是双线
+	                        -> dotted     -> 选中元素中的文本装饰是点线
+	                        -> wavy       -> 选中元素中的文本装饰是波浪线
+
+					  color -> 颜色        -> 默认继承文本颜色
+
+	text-decoration-skip: objects         -> 选中元素中的文本装饰略过原子内联元素（图片和inline-block）
+					      none            -> 选中元素中的文本装饰不略过任何位置
+					      spaces          -> 选中元素中的文本装饰略过空白位置
+
+	text-shadow: none                     --> 选中元素中的文本无阴影
+	             长度1/长度2/长度3/颜色      --> 选中元素中的文本阴影水平偏移'长度1'
+	                                                          竖直偏移'长度2'
+	                                                          阴影模糊'长度3'
+	                                                          阴影颜色'颜色'
+
+	direction: ltr                        --> 选中元素中的文本方向从左至右
+	           rtl 						  --> 选中元素中的文本方向从右至左
+
+
+转换
+	transform-origin: 长度/百分比/left/center/right 长度/百分比/top/center/bottom    --> 仅限块级元素和个别内联元素，设置选中元素的配置原点（默认50% 50%）
+
+	transform-style: flat                 --> 仅限变换元素，选中元素（父元素）的子元素位于自己的平面内（默认）
+	                 preserve-3d          --> 仅限变换元素，选中元素（父元素）的子元素位于三维空间内
+
+	perspective: none                     --> 仅限变换元素，选中元素（父元素）不设置透视距离（默认）
+	             长度                      --> 仅限变换元素，设置选中元素（父元素）的透视距离
+
+	perspective-origin: 长度/百分比/left/center/right 长度/百分比/top/center/bottom  --> 仅限变换元素，设置选中元素（父元素）的透视原点
+
+	backface-visibility: visible          --> 仅限变换元素，选中元素（子元素）的背面可见
+	                     hidden           --> 仅限变换元素，选中元素（子元素）的背面不可见
+
+	transform: none                       --> 仅限块级元素和个别内联元素，选中元素不转换
+
+			   matrix(a,b,c,d,e,f)        --> 所有2D转换的底层实现
+			   translate(x,y)             --> 仅限块级元素和个别内联元素，选中元素沿x轴平移x，沿y轴平移y
+			   rotate(度数) 				  --> 仅限块级元素和个别内联元素，选中元素绕旋转点旋转'度数'（配置原点即旋转点）
+			   scale(x,y)                 --> 仅限块级元素和个别内联元素，选中元素沿x轴缩放x，沿y轴缩放y
+			   skew(x,y)                  --> 仅限块级元素和个别内联元素，选中元素沿x轴倾斜x，沿y轴倾斜y
+
+			   matrix3d(4*4的矩阵)         --> 所有3D转换的底层实现
+			   translate3d(x,y,z)         --> 仅限块级元素和个别内联元素，选中元素沿x轴平移x，沿y轴平移y，沿z轴平移z
+			   rotate3d(x,y,z,度数)        --> 仅限块级元素和个别内联元素，选中元素绕旋转轴旋转'度数'（点（x,y,z）和配置原点的连线形成旋转轴，轴方向指向配置原点）
+			   scale3d(x,y,z) 			  --> 仅限块级元素和个别内联元素，选中元素沿x轴缩放x，沿y轴缩放y，沿z轴缩放z
+			   perspective(长度)           --> 仅限块级元素和个别内联元素，设置选中元素（子元素）的透视距离（父元素的perspective和perspective-origin无效，透视原点变为选中元素的中心）
+
+	transition: property duration timeing-function delay    --> 设置选中元素的过渡效果（可以设置多个过渡效果，用空格隔开）
+
+				property: none/all/指定css属性  			-> 选中元素中参与过渡的属性（默认为all，多个指定css属性时用逗号隔开）
+
+				duration: ms/s                 			-> 选中元素过渡效果的持续时间（单位：毫秒ms；单位：秒s）
+
+				timeing-function: ease         			-> 选中元素中属性过渡的样式为'平稳过渡'（默认）
+				                  ease-in      			-> 选中元素中属性过渡的样式为'由慢到快'
+				                  ease-out     			-> 选中元素中属性过渡的样式为'由快到慢'
+				                  ease-in-out  			-> 选中元素中属性过渡的样式为'由慢到快再到慢'
+				                  linear       			-> 选中元素中属性过渡的样式为'线性过渡'
+								  steps(步数, start/end) -> 选中元素中属性过渡的样式为'指定多少步完成过渡，过渡效果发生在每一步的开始还是结束
+								  cubic-bezier(a,b,c,d) -> 选中元素中属性过渡的样式为'自定义贝塞尔曲线'（其他过渡样式的底层实现；a、b、c、d均在0.0~1.0之间）
+
+				delay: ms/s                  			-> 选中元素过渡效果的延迟时间（单位：毫秒ms；单位：秒s）
+
+
+动画
+	@keyframes name {                     --> 定义动画的具体内容
+		from {css样式声明;...;}             --> 动画的第一帧内容
+	    百分比 {css样式声明;...;}
+	    百分比 {css样式声明;...;}
+	    .
+	    .                                 --> 动画的第n帧内容
+	    .
+	    to {css样式声明;...;}               --> 动画的最后一帧内容
+	}
+
+	animation: name duration timeing-function delay iteration-count direction fill-mode play-state    --> 设置选中元素的动画效果
+
+			   name:                                   -> @keyframes中设置的name
+
+			   duration: ms/s                          -> 选中元素动画效果的持续时间（单位：毫秒ms；单位：秒s）
+
+			   timeing-function: ease         		   -> 选中元素中属性过渡的样式为'平稳过渡'（默认）
+				                 ease-in      		   -> 选中元素中属性过渡的样式为'由慢到快'
+				                 ease-out     		   -> 选中元素中属性过渡的样式为'由快到慢'
+				                 ease-in-out  		   -> 选中元素中属性过渡的样式为'由慢到快再到慢'
+				                 linear       		   -> 选中元素中属性过渡的样式为'线性过渡'
+								 steps(步数, start/end) -> 选中元素中属性过渡的样式为'指定多少步完成过渡，过渡效果发生在每一步的开始还是结束
+								 cubic-bezier(a,b,c,d) -> 选中元素中属性过渡的样式为'自定义贝塞尔曲线'（其他过渡样式的底层实现；a、b、c、d均在0.0~1.0之间）
+
+			   delay: ms/s                  		   -> 选中元素过渡效果的延迟时间（单位：毫秒ms；单位：秒s）
+
+			   iteration-count: 数字                    -> 选中元素动画效果的循环次数（默认为1）
+			                    infinite               -> 选中元素动画效果进行无限循环
+
+			   direction: normal                       -> 选中元素动画效果在多次循环时都正向进行（默认）
+			              reverse                      -> 选中元素动画效果在多次循环时都反向进行
+			              alternate                    -> 选中元素动画效果在多次循环时一次正向一次反向，交替进行
+			              alternate-reverse            -> 选中元素动画效果在多次循环时一次反向一次正向，交替进行
+
+			   fill-mode: none                         -> 不设置选中元素动画之外的状态（默认）
+			              forwards 					   -> 设置选中元素状态为动画结束时的状态
+			              backwards 				   -> 设置选中元素状态为动画开始时的状态
+			              both 						   -> 设置选中元素状态为动画开始或结束时的状态
+
+			   play-state: running  				   -> 动画进行（默认）
+			               paused 					   -> 动画暂停
+
+
+JQuery
+=============================================
+选择器
+-----------------------
+$('#id名')
+
+'''
+
+
+

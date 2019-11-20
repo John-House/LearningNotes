@@ -1,0 +1,197 @@
+1) 登录
+	// itchat.login(enableCmdQR=False, picDir=None, qrCallback=None, loginCallback=None, exitCallback=None)
+	itchat.login(loginCallback=None)
+		--> return: None/阻塞,即登录网页微信；
+			注意1: 若用户未扫描'二维码',则该方法一直阻塞；
+		--> enableCmdQR ,bool,即是否在命令行显示'二维码'；
+		--> picDir ,str,即设置待扫描的'二维码'所在的绝对路径；
+		--> loginCallback ,func,即设置登录成功后的回调函数(若为None,则表示清除命令行并删除'二维码')；
+	
+	// itchat.auto_login(hotReload=False, statusStorageDir='itchat.pkl', enableCmdQR=False, picDir=None, qrCallback=None, loginCallback=None,exitCallback=None)
+	itchat.auto_login(hotReload=False, statusStorageDir='itchat.pkl', loginCallback=None)
+		--> return: None/阻塞,即登录网页微信；
+		--> hotReload ,bool,即是否开启'热重载'；
+		--> statusStorageDir ,str,即设置储存'状态日志'的绝对路径；
+		--> enableCmdQR ,bool,即是否在命令行显示'二维码'；
+		--> picDir ,str,即设置待扫描的'二维码'所在的绝对路径；
+		--> loginCallback ,func,即设置登录成功后的回调函数(若为None,则表示清除命令行并删除'二维码')；
+
+		itchat.get_QRuuid()
+			--> return: str,即返回UUID对象对应的Base64编码后的值；
+				注意1: UUID对象被用于'下载二维码'和'检查登录状态码',因此是登入操作必要的元素；
+				注意2: 每次调用该方法都会返回不同的UUID对象对应的Base64编码后的值；
+
+		itchat.get_QR(uuid=None, enableCmdQR=False, picDir=None, qrCallback=None) 
+			--> return: bytes, 即
+			--> enableCmdQR ,bool,即是否在命令行显示'二维码'；
+			--> picDir ,str,即指定'二维码'所在的绝对路径；
+
+		itchat.check_login(uuid=None)
+			--> return: status_str,即根据UUID检查登录状态,并返回对应的状态码；
+						'200'	->  表示登录成功
+						'201'	-> 	表示等待移动端确认登录
+						'408'	->  表示UUID超时
+						'0'		->  表示未知的错误
+			--> uuid ,uuid_obj,即若为None,则默认为最近获取到的UUID；
+
+		itchat.web_init()
+			--> return: returnPage_dict,dict,即
+
+		itchat.show_mobile_login()
+			--> return: ReturnValue_obj,dict,即
+
+		itchat.start_receiving(exitCallback=None, getReceivingFnOnly=False)
+			--> return: None,即
+
+	itchat.logout()
+		--> return: ReturnValue_obj,dict,即退出网页微信；
+
+2) 消息
+	itchat.send_msg(msg='Test Message', toUserName=None)
+		--> return: ReturnValue_obj,dict,即向toUserName用户发送msg文本；
+
+	// itchat.send_file(fileDir, toUserName=None, mediaId=None, file_=None)
+	itchat.send_file(fileDir, toUserName=None)
+		--> return: ReturnValue_obj,dict,即向toUserName用户发送fileDir所在的文件；
+
+	// itchat.send_image(fileDir=None, toUserName=None, mediaId=None, file_=None)
+	itchat.send_image(fileDir=None, toUserName=None)
+		--> return: ReturnValue_obj,dict,即向toUserName用户发送fileDir所在的图片；
+
+	// itchat.send_video(fileDir=None, toUserName=None, mediaId=None, file_=None)
+	itchat.send_video(fileDir=None, toUserName=None)
+		--> return: ReturnValue_obj,dict,即向toUserName用户发送fileDir所在的视频；
+	
+	// itchat.upload_file(fileDir, isPicture=False, isVideo=False, toUserName='filehelper', file_=None, preparedFile=None)
+	itchat.upload_file(fileDir, isPicture=False, isVideo=False, toUserName='filehelper')
+		--> return: ReturnValue_obj,dict,即上传文件至微信服务器并返回JSON对象；
+					JSON['BaseResponse']
+						JSON['BaseResponse']['Ret']
+						JSON['BaseResponse']['ErrMsg']
+						JSON['BaseResponse']['RawMsg']
+							'Ret'	ErrMsg
+							0		请求成功
+							-1000	返回值不带BaseResponse
+							-1001	无法找到对应的成员
+							-1002	文件位置错误
+							-1003	服务器拒绝连接
+							-1004	服务器返回异常值
+							-1005	参数错误
+							-1006	无效操作
+					JSON['MediaId']
+					JSON['StartPos']
+					JSON['CDNThumbImgHeight']
+					JSON['CDNThumbImgWidth']
+					JSON['EncryFileName']
+
+	itchat.send(msg, toUserName=None, mediaId=None)
+		--> return: ReturnValue_obj,dict,即向toUserName用户发送mediaId对应的内容；
+
+	itchat.revoke(msgId, toUserName, localId=None)
+		--> return: ReturnValue_obj,dict,即
+	
+	itchat.run(debug=False, blockThread=True)
+		--> return: None,即从'群聊/好友/公众号'队列中提取'消息'后，将该'消息'传入被.msg_register装饰的方法中并执行该方法；
+						 然后将方法执行后的返回值发送给'消息'的发送方；
+		--> debug ,bool,即将日志系统的等级设置为DEBUG(默认为INFO)；
+		--> blockThread ,bool,即设置.run()方法的运行模式:
+							  若blockThread=True,则.run()方法在当前线程(即主线程,阻塞)调用.reply_fn()方法；
+							  若blockThread=False,则.run()方法开启新的线程(并以守护线程形式,即不阻塞)调用.reply_fn()方法；
+						注意1: .reply_fn()方法内部以'self.alive'(即微信是否登出)为flags的While循环一直调用.configured_reply()
+
+3) 交互
+	// 好友
+	itchat.search_friends(name=None, userName=None, remarkName=None, nickName=None, wechatAccount=None)
+		--> return: list,即返回满足指定条件的朋友列表；
+
+	itchat.get_friends(update=False)
+		--> return: list,即返回微信的朋友列表；
+				注意1: 每个列表元素为'Dict'(或者说'JSON')对象,其Key可以是:
+						UserName 			->  '用户名'加密后的字符串(以'1个@'开头表示好友,'2个@'开头表示群组)
+						Province			->  '用户所在省份'
+						City				->  '用户所在城市'
+						NickName			->  '用户昵称'
+						Sex					->  '用户性别'(0-保密,1-男,2-女)
+						Signature			->  '用户签名'
+						HeadImgUrl			->  '用户头像储存URL'
+						PYQuanPin			->  '用户名拼音全拼'
+						PYInitial			->  '用户名拼音缩写'
+						RemarkPYQuanPin		->  '备注名拼音全拼'
+						RemarkName			->  '备注名'
+						RemarkPYInitial		->  '备注名拼音缩写'
+						StarFriend			->  '是否星标朋友'(0-否,1-是)
+						MemberCount			->  '成员数量'(仅限群聊)
+						KeyWord
+						MemberList
+						DisplayName
+						EncryChatRoomId
+						Alias
+						UniFriend
+						AppAccountFlag
+						VerifyFlag
+						ChatRoomId
+						HideInputBarFlag
+						AttrStatus
+						SnsFlag
+						OwnerUin
+						ContactFlag
+						Uin
+						Statues 
+						WebWxPluginSwitch
+						HeadImgFlag
+						IsOwner
+		--> update ,bool,即设置返回本地的朋友列表还是联网后的朋友列表；
+	
+	itchat.add_friend(userName, status=2, verifyContent='', autoUpdate=True)
+	
+	itchat.update_friend(userName)
+
+	// 群聊
+	itchat.search_chatrooms(name=None, userName=None)
+		--> return: list,即返回满足指定条件的群组列表；
+
+	itchat.get_chatrooms(update=False, contactOnly=False)
+		--> return: list,即返回微信群聊列表；
+		--> update ,bool,即返回本地列表还是联网后的列表；
+		--> contactOnly ,bool,即返回星标群聊；
+		
+	itchat.create_chatroom(memberList, topic='')
+		--> return: 
+
+	itchat.set_chatroom_name(chatroomUserName, name)
+
+	itchat.add_member_into_chatroom(chatroomUserName, memberList, useInvitation=False)
+
+	itchat.delete_member_from_chatroom(chatroomUserName, memberList)
+
+	itchat.update_chatroom(userName, detailedMember=False)
+		--> return: list,即更新并返回微信群聊列表；
+
+	// 公众号
+	itchat.get_mps(update=False)
+		--> return: list,即返回公众号列表；
+
+	itchat.search_mps(name=None, userName=None)
+		--> return: list,即返回满足指定条件的公众号列表；
+
+	// 其他
+	itchat.set_alias(userName, alias)
+
+	itchat.set_pinned(userName, isPinned=True)
+
+	itchat.get_head_img(userName=None, chatroomUserName=None, picDir=None)
+
+4) 装饰器
+	itchat.msg_register(msgType, isFriendChat=False, isGroupChat=False, isMpChat=False)
+		--> 作为某个函数的装饰器,该函数用于自动应答来自任何用户msgType类型的内容(对应该函数的msg参数)；
+		--> msgType ,CONST / CONST_list,可以是:
+				itchat.content.TEXT			->  纯文本
+				itchat.content.MAP			->  地理位置
+				itchat.content.CARD			->  名片
+				itchat.content.SHARING		->  分享链接
+				itchat.content.PICTURE		->  图片(或表情)
+				itchat.content.RECORDING	->  语音
+				itchat.content.ATTACHMENT	->  附件
+				itchat.content.VIDEO		->  视频
+				itchat.content.FRIENDS		->  好友申请
+				itchat.content.SYSTEM		->  系统消息

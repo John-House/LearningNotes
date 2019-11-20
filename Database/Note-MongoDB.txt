@@ -1,0 +1,351 @@
+'''
+MongoDB
+=============================================
+
+MongoDB中的数据类型
+--------------------------------
+
+1) Date对象				::= 64位带符号的整数
+   Date()               --> ctype: 字符串
+   						--> Wed Dec 19 2012 01:03:25 GMT-0500 (EST)
+
+   new Date()/ISODate() --> ctype: ISODate()包装的Date对象
+   						--> ISODate("2012-12-19T06:01:17.171Z")
+
+2) ObjectID()对象		::= 12字节的16进制数字组成的
+   ObjectID()           --> ctype: ObjectID对象
+           				--> ObjectId("507f1f77bcf86cd799439011")
+
+3) NumberLong()对象 		::= 64位整数（MongoDB默认所有数字为64位双精浮点类型）
+   NumberLong()         --> NumberLong("2090845886852")
+
+4) NumberInt()对象       ::= 32位整数（MongoDB默认所有数字为64位双精浮点类型）
+   NumberInt()
+
+5) NumberDecimal()对象   ::= 128位精确小数
+   NumberDecimal()      --> NumberDecimal("1000.55")
+
+
+主要操作
+--------------------------------
+1) 数据库
+show dbs
+--> 显示当前服务器上所有的数据库
+
+db
+--> 显示当前数据库的名字
+
+db.getName()
+--> 显示当前数据库的名字
+
+db.stats()
+--> 显示当前数据库的存储信息(集合数、视图数、数据容量...)
+
+db.version()
+--> 显示当前数据库的版本号
+
+db.serverBuildInfo()
+--> 显示用于创建当前数据库的参数信息
+
+db.hostInfo()
+--> 显示运行当前数据库的系统的基本信息
+
+use 数据库名
+--> 切换至指定的数据库
+
+db.getSiblingDB('数据库名').xxx
+--> 切换至指定的数据库，以便后续的跨数据库操作
+
+db.shurdownServer()
+--> 干净安全地关闭服务器和mongos进程
+	该操作必须在admin数据库下执行，否则报错
+
+db.copyDatabase('源数据库','新数据库','源主机IP','用户名','密码','拷贝机制')
+--> 拷贝数据库
+	::= 当前方法在'新数据库'一端执行
+	::= 如果'新数据库'不存在，则新建
+	::= 如果新、源数据库中有相同的集合，则抛出异常并不再拷贝剩余的集合
+	::= 源数据库需要足够的空间用于拷贝，使用db.stats()检查'源数据库'的size
+
+	'源主机IP': 如果从当前数据库拷贝到当前数据库，则可以省略
+	'拷贝机制': MongoDB版本3.0及以上默认为SCRAM-SHA-1，否则为MONGODB-CR
+
+db.dropDatabase()
+--> 删除当前数据库adminCommand()
+
+
+
+2) 集合
+db.createCollection('新集合名',{options})
+--> 创建新的集合（常用于创建特定的结合）
+	options可以有多个常用参数：
+		capped:true 	 --> 如果为true，则创建固定集合，为此必须指定size参数
+		size:xxx   		 --> 如果设置了数字，则限定存储数据的最大值（字节数），
+							 超过该容量后，新数据的插入会导致最开始的旧数据清楚
+							 size参数仅用于固定集合，其他集合会忽略它
+		max:xxx 		 --> 如果设置了数字，则限定存储文档的最大数（document），
+						 	 size的优先级高于max，如果先达到size的设定值，即时未达到max的设定值，也会发生数据替换
+
+3) 视图
+db.createView('新视图名','源集合名/源视图名',[管道操作...])
+--> 创建新的视图（视图是只读的，连重命名都不行）
+	::= 视图使用源集合的索引
+	::= 无法对视图进行$natural操作
+
+
+
+
+
+
+
+
+show collections
+--> 显示当前使用的数据库中所有的集合
+
+
+
+
+
+show users
+
+show roles
+
+show logs/log
+
+
+
+
+
+db.集合名.insert({字段1:段1值,...},{字段a:段a值,...})
+--> 向对应数据库的对应集合中插入数据
+	--> ()中的每个{...}都是一个document，document之间没有严格的关系
+
+db.集合名.find({过滤条件},{投影/显示条件})
+--> 显示指定的所有数据（若过滤条件为'{}'即空字典，则显示集合中的所有数据）
+
+	db.集合名.findOne({})
+	--> 同上，唯一的区别是只显示满足条件的第一条数据
+
+	db.集合名.find/findOne().pretty()
+	--> 格式化显示满足条件的数据（与json的格式相同）
+
+	db.集合名.find().limit(数字)
+	--> 显示指定条数的数据，可以与.skip()配合使用（书写不分先后）
+
+	db.集合名.find().skip(数字)
+	--> 跳过指定条数的数据，显示它之后的所有数据，可以与.limit()配合使用（书写不分先后）
+
+	--> find()和findOne()都可以在()中写入各种条件进行过滤：
+		自定义
+			{$where:function(){...}} --> ...为JavaScript中的匿名函数
+
+		比较运算符
+			{字段:{$eq:段值a}}     --> 字段值等于a的数据
+				{字段:段值a}       --> 同上，更简略的写法
+			{字段:{$ne:段值a}}     --> 字段值不等于a的数据
+
+			{字段:{$in:[段值a,段值b,...]}} --> 字段值为a或b或...的数据
+			{字段:{$nin:[段值a,段值b,...]}} --> 字段值不为a或b或...的数据
+
+			{字段:{$gt:段值a}}   --> 字段值大于a的数据
+			{字段:{$gte:段值a}}   --> 字段值大于或等于a的数据
+
+			{字段:{$lt:段值a}}   --> 字段值小于a的数据
+			{字段:{$lte:段值a}}   --> 字段值小于或等于a的数据
+
+		逻辑运算符
+			{字段1:段值a，字段2:段值b,...} --> 同时满足字段1和字段2和...要求的数据
+				{$and:[{字段1:段值a},{字段2:段值b},{...},...]} --> 同上，更简略的写法
+
+			{$or:[{字段1:段值a},{字段2:段值b},{...},...]} --> 满足字段1或字段2或...要求的数据
+
+			{字段1:段值a,$or:[{字段2:段值b},{字段3:段值c},{...},...]} --> and和or的嵌套操作
+
+		#   段值，可以包含比较运算符的操作，也可以是正则的操作，例如：字段1:/正则表达式/ --> /.../ 两个/是格式规范
+		# 	段值，如果包含嵌套格式，则满足条件时与嵌套内容的顺序完全一致，否则即便值一样，顺序不一样也视作不满足
+			eg: db.collec.insert({size:{h:1,w:2,l:3}}) --> 嵌套结构是字典
+			查询时，db.collec.find({size:{w:2,h:1,l:3}}) 是查不到的，因为顺序乱了
+			eg: db.collec.insert({size:['h','w','l']}) --> 嵌套结构是数组（即列表）
+			查询时，db.collec.find({size:['w','h','l']}) 是查不到的，因为顺序乱了
+			修改为，db.collec.find({size:{$all:['w','h','l']}}) 可以查到，$all的作用：只要值相同就OK，忽略顺序
+			或者说，db.collec.find({size:'w'}) 缩小条件也可以查到
+
+	--> find()还接收第2个参数，find({过滤条件},{显示条件})
+		换句话说省略第2个参数，即表示默认返回满足过滤条件的所有数据
+		形如：
+		db.collec.find({过滤条件},{字段1:1/0,字段2:1/0,...})
+			--> 从满足过滤条件的所有数据中显示字段1,字段2,...的数据
+				字段1:1 ，表示显示该字段； 字段1:0 ，表示不显示该字段
+				_id字段是MongoDB默认设置的，默认会显示出来，如果不想显示，只能通过_id:0的方式
+
+	--> find()在过滤段值为null时，会根据null的表现形式生成不同的查询结果：
+		1）find({字段:null})       	   --> 查询结果包含：该字段值为null，以及压根不包含该字段的数据
+		2）find({字段:{$type:10}})      --> 查询结果包含：该字段职为null的数据
+		3）find({字段:{$exists:false}}) --> 查询结果包含：压根不包含该字段的数据
+
+db.集合名.update({过滤条件},{操作符:{字段:指定值}}[,{upsert:true}/{multi:true})
+--> 对指定的数据更新
+	1) db.collec.update({$currentDate:{字段1:{$type:'date'},字段2:{$type:'timestamp',...}}})
+       将字段1的段值修改为当前日期，等效写法为{字段1:true}
+       将字段2的段值修改为当前时间戳
+
+    2) db.collec.update({$inc:{字段1:a,字段2:-b,...}})
+	   将字段1的段值加a，
+	   将字段2的段值减b,
+	   如果字段1或字段2不存在，该操作将新建一个该字段并赋予对应的段值
+	   如果字段1或字段2的段值为null，该操作将抛出异常
+
+	3) db.collec.update({$min:{字段1:段值a,...}})
+	   如果段值a小于字段1的现有值，则将其修改为段值a；否则修改无效
+	   比较时，日期的值越早越小
+	   如果字段不存在，该操作将新建一个该字段并赋予对应的段值
+
+	4) db.collec.update({$max:{字段1:段值a,...}})
+	   如果段值a大于字段1的现有值，则将其修改为段值a；否则修改无效
+	   比较时，日期的值越早越小
+	   如果字段不存在，该操作将新建一个该字段并赋予对应的段值
+
+	5) db.collec.update({$mul:{字段1:段值a,...}})
+	   将字段1的段值乘以'段值a',
+	   段值a需要与字段1的现有值类型相同
+	   如果字段不存在，该操作将新建一个该字段并赋予0
+
+	6) db.collec.update({$rename:{字段1:新字段名,...}})
+	   将字段1修改为新的名字，
+	   该操作要求新字段名必须不同于旧字段名，是对所有满足条件的数据进行修改
+	   该操作的逻辑是：先$unset新字段名和旧字段名，然后$set新字段名，因此，该操作可能改变字段在对应document中的位置
+	   如果字段不存在，该操作修改无效
+
+	7) db.collec.update({$set:{字段1:段值a,字段2:段值b,...}})
+	   将字段1的段值修改为段值a，
+	   将字段2的段值修改为段值b，
+	   如果字段不存在，该操作将新建一个该字段并赋予指定的值（如果用.号也一样）
+
+	8) db.collec.update({$unset:{字段1:'',字段2:'',...}})
+	   将字段1和字段2删除，
+	   ''可以替换成任意值，都不会影响操作结果，
+	   如果字段不存在，该操作修改无效
+	  *如果字段值是数组，则将数组元素都修改为null，但不改变元素个数和位置
+
+
+db.集合名.remove({过滤条件},{justOne:true/false,writeConcern:文档对象,collation:文档对象})
+--> 删除指定的数据（若过滤条件为'{}'即空字典，则删除集合中的所有数据）
+	justOne为true，则删除一条数据；为false(即默认值)，则删除（指定的）所有数据，
+	该操作无法删除'索引'
+
+
+db.集合名.aggregate([管道1,管道2,...],options)
+--> 统计集合或视图中的数据（管道操作可以有多阶，从左至右按顺序依次进行）
+	管道类型有:
+	{$addFields:{字段1:表达式1,...}} --> 在统计结果中添加一个或多个新字段
+	{$count:'结果字段名'} --> '结果字段名'必须是最纯粹的字符串，它为count管道操作结果新建的字段名
+	{$group:{_id:null/$其他字段名,字段1:{分组操作符1:表达式1},...}} 	--> 分组统计输出结果
+		分组操作符:
+		$sum 	--> 返回数字值的总和
+		$avg 	--> 返回数字值的平均值
+		$
+
+	options:
+
+
+与Python交互
+
+import pymongo
+--------------------------------
+	pymongo.version
+	--> ctype:字符串，即显示pymongo的版本
+
+	pymongo.MongoClient(host='MongoDB URL',connect=True/False)
+	--> ctpye:client对象，即连接指定的服务器
+		--> pymongo.MongoClient() 等价于 pymongo.mongo_client.MongoClient()
+		--> host='MongoDB URL'，默认是本地的27017端口
+				::= 'mongodb://[user:pwd@]host1[:port1][,host2[:port2],...][/database ][?options]'
+					mongodb://               --> 表示该字符串启用了MongoDB的标准连接格式
+					usr:pwd@                 --> 表示启用了账户和密码
+					host1                    --> 表示连接的主机IP
+					port1                    --> 表示连接的端口号（后续的所有端口号默认为27017）
+					,hostn                   --> 表示指定的副本数据库（即副本集）
+					/database                --> 如果有身份验证，则连接指定的数据库；如果有身份验证但未指定数据库，则俩连接admin数据库
+
+					?(&)replicaSet=副本集名字
+					?(&)ssl=true/false       --> 表示是否使用TLS/SSL连接数据库（默认为false）
+						&ssl_cert_reqs=ssl.CERT_NONE 		 --> 如果ssl为true，则连接默认需要证书，该参数使连接无需证书
+						&ssl_ca_certs='路径'					 --> 如果ssl为true，则连接默认需要证书，该参数使连接到指定路径下获取证书
+						,ssl_certfile='路径'					 --> 如果客户端想配置证书，可以添加参数ssl_certfile，并指定对应的路径
+						,ssl_keyfile='路径'					 --> 如果客户端证书和私钥存放在不同的文件中，可以添加参数ssl_keyfile，并指定对应的路径
+					?(&)connectTimeoutMS     --> 连接超时设置（默认无超时设置）
+					?(&)socketTimeoutMS      --> 收发套接字超时设置（默认无超时设置）
+		--> connect=True，立即连接至数据库（默认值）；否则在第一次操作数据库时进行连接
+
+		client.close()
+		--> ctpye:None，即关闭客户端client的连接
+
+		client['数据库名']/client.数据库名
+		--> ctype:db对象，即连接至指定的数据库
+			推荐使用字典类型，因为它能解决'.属性'无法连接名为'xx-xx'数据库的情况
+
+			db.name
+			--> ctpye:字符串，即数据库的名字
+
+			========================================
+
+			db['集合名']/db.集合名
+			--> ctype:集合对象，即连接至指定的集合
+				推荐使用字典类型，理由同上
+
+			db.create_collection(name=,...,capped=True/False,size=xx,max=xx)
+			--> ctype:集合对象，即创建特定的集合（如果已经存在，则抛出异常）
+				name=...	--> 新建的集合名字
+				capped=... 	--> 如果为True,则新建的集合为固定集合
+								当集合中数据容量或document个数达到特定值时，新的数据会使得最旧的数据被擦除
+				size=... 	--> 如果capped为True，则size定义了集合的最大数据容量，否则为集合的初始数据容量
+				max=... 	--> 如果capped为True，则max定义了集合的最大document数
+				...包括多个keyword-only参数：
+					codec_options=None
+					read_preference=None
+					write_concern=None
+					read_concern=None
+					collation=None
+					session=None
+
+			db.drop_collection('集合名'/集合对象,session=None)
+			--> ctype:response，即删除指定的集合
+
+			db.collection_names(include_system_collections=True,session=None)
+			--> ctype:列表，即获取当前数据库中所有集合的名字
+				include_system_collections --> 如果为False,返回的列表中不包含系统级集合的名字
+
+			========================================
+
+			db.command(<command>,value=1,check=True,allowable_errors=[...], read_preference=xx, codec_options=xx)
+			--> ctyp:response，即向当前数据库发送一条指令
+				<command> 			--> 可以是字符串(对应简单的指令)，也可以是{...}（即document对象）
+				check 				--> 如果为True，则检查指令反馈中是否有异常，若有则抛出OperationFailure
+				allowable_errors 	--> 如果check=True，则位于该列表中的异常信息会被忽略
+
+			db.command('createUser','用户名',pwd='密码',roles=['权限'])
+			--> ctype:response，即为当前数据库创建用户
+
+			db.command('usersInfo','用户名')
+			--> ctype:response，即查询当前数据库指定用户的信息
+
+			db.command('updateUser',用户名',pwd='新密码'[,roles=['权限']])
+			--> ctype:response，即修改指定用户的信息（密码或权限）
+
+			db.command('dropUser','用户名')
+			--> ctype:response，即取消指定用户进入当前数据库的权限
+
+				collect.name
+				--> ctype:字符串，即当前集合的名字
+
+				collect.full_name
+				--> ctype:字符串，即当前集合的全名（形如：数据库名.集合名）
+
+				collect.insert_one({...})
+				--> ctype:None，即向指定的集合中插入一条document
+					{...}必须是字典类型的键值对
+
+				collect.insert_many([{...},{...},...])
+				--> ctype:None，即向指定的集合中插入多条document
+					{...}必须是字典类型的键值对，它们被嵌套在一个列表中
+'''
